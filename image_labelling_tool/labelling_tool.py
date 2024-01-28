@@ -44,7 +44,7 @@ from skimage.color import gray2rgb
 # skimage.util.pad is deprecated and removed in v0.19.0
 # NumPy's pad function is equivalent
 from skimage.util import img_as_ubyte #,pad
-from skimage.measure import find_contours
+from skimage.measure import find_contours, approximate_polygon
 
 # Try to import cv2
 try:
@@ -481,7 +481,7 @@ class PolygonLabel (AbstractLabel):
 
 
     @staticmethod
-    def mask_image_to_regions(mask):
+    def mask_image_to_regions(mask, tollerance=None):
         """
         Convert a mask label image to regions/contours that can be used as regions for a Polygonal label
 
@@ -489,6 +489,7 @@ class PolygonLabel (AbstractLabel):
 
         :param mask: a mask image as  `(h,w)` numpy array (preferable of dtype bool) that identifies the pixels
             belonging to the object in question
+        :param tollerance (optional), tollerance for approximation (mhf)
         :return: regions as a list of NumPy arrays, where each array is (N, [x,y])
         """
         contours = []
@@ -501,6 +502,10 @@ class PolygonLabel (AbstractLabel):
                 # mhf using np.pad
                 mask_trim = np.pad(mask_trim, [(1,1), (1,1)], mode='constant').astype(np.float32)
                 cs = find_contours(mask_trim, 0.5)
+                # mhf approximate cs 
+                if tollerance is not None:
+                    for i, c in enumerate(cs):
+                        cs[i] = approximate_polygon(c, tollerance)
                 for contour in cs:
                     simp = _simplify_contour(contour + np.array((ystart, xstart)) - np.array([[1.0, 1.0]]))
                     if simp is not None:
