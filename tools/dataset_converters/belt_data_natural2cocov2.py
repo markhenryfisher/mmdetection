@@ -98,48 +98,6 @@ def get_contour(mask, debug=True):
     return contours
      
 
-# def get_contour(mask, debug=True):
-#     """
-#     https://scikit-image.org/docs/stable/auto_examples/edges/plot_contours.html
-
-#     """        
-#     # re-label mask
-#     sub_mask = measure.label(mask, background=0, connectivity=2)
-    
-#     # instances are encoded as different colors
-#     obj_ids = np.unique(sub_mask)
-#     # first id is the background, so remove it
-#     obj_ids = obj_ids[1:]
-    
-#     # split the color-encoded mask into a set
-#     # of binary masks
-#     masks = sub_mask == obj_ids[:, None, None] 
-    
-#     contours=[]
-#     for i in range(len(obj_ids)):
-#         masks[i] = morphology.binary_opening(masks[i], footprint=np.ones((3,3)))
-#         contour = measure.find_contours(masks[i], fully_connected='high')
-#         if contour:
-#             # assert len(contour) == 1
-#             if len(contour) != 1:
-#                 print('contour error')
-#             contours.append(contour[0])
-    
-    
-    
-#     # don't yet know how to handle multiple contours
-# #    if len(contours) == 0 or len(contours) > 1:
-#     if len(contours) == 0:
-#         return None
-    
-#     # simplify the contour, tollerance = 1.0 pixel
-#     for idx, c in enumerate(contours):
-#         contours[idx] = measure.approximate_polygon(c, 1.0)
-                        
-
-        
-#     return masks, contours
-
 def poly2coco(mask):
     """
     get polygon contours, and convert to coco format
