@@ -47,6 +47,8 @@ CLS_FISH_CLASSES = ['fish_mackerel', 'fish_redgurnard', 'fish_catfish', 'fish_ha
                     'fish_whiting', 'fish_saithe', 'fish_norwaypout', 'fish_bib', 'fish_boar_fish', 'fish_brill',
                     'fish_seabass', 'fish_cod', 'fish_hake', 'fish_john_dory', 'fish_commondragonet']
 
+PRIMITIVE_LABELS = ['polygon', 'box']
+COMPOUND_LABELS = ['group']
 
 
 def generate_splits(img_list):
@@ -195,12 +197,32 @@ def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
         # initialize class (line 1719)
         limg = labelling_tool.PersistentLabelledImage(img_path, label_path)
         # read json and get labels (line 1773) 
-        labels = limg.labels_json
+        # labels = limg.labels_json
         # render instances (line 1620)
         mask, cls_map = limg.render_label_instances(FISH_CLASSES, multichannel_mask=False)
 
         # labels = labelling_tool.ImageLabels.from_json(labels)
         labels = labelling_tool.ImageLabels.from_file(label_path)
+        
+        for label in labels:
+            label_json = label.to_json()
+            if label_json['label_type'] in PRIMITIVE_LABELS:
+                print(label_json['label_type'])
+                for region in label.regions:
+                    display(mask, [region], 'x,y')
+            elif label_json['label_type'] in COMPOUND_LABELS:
+                print(label_json['label_type'])
+                for comp_label in label.component_labels:
+                    label_json = comp_label.to_json()
+                    print(label_json['label_type'])
+                    for region in comp_label.regions:
+                        display(mask, [region], 'x,y')
+
+                    
+
+                
+            else:
+                print('Unkown Label Type')
         
         if debug:
             # convert binay mask to image
@@ -218,17 +240,17 @@ def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
             ax2.set_yticks([])
             plt.show()
                         
-        for lbl in labels:
-            print('obj_id: {}'.format(lbl['object_id']))
-            if lbl['label_type'] == 'polygon':
-                verts = lbl['vertices']
-                contour = np.zeros((len(verts), 2), dtype=np.int32)
-                for i, coord in enumerate(verts):
-                    contour[i,1] = int(coord['x'])
-                    contour[i,0] = int(coord['y'])
-                display(mask, [contour])
-            elif lbl['label_type'] == 'group':
-                pass
+        # for lbl in labels:
+        #     print('obj_id: {}'.format(lbl['object_id']))
+        #     if lbl['label_type'] == 'polygon':
+        #         verts = lbl['vertices']
+        #         contour = np.zeros((len(verts), 2), dtype=np.int32)
+        #         for i, coord in enumerate(verts):
+        #             contour[i,1] = int(coord['x'])
+        #             contour[i,0] = int(coord['y'])
+        #         display(mask, [contour])
+        #     elif lbl['label_type'] == 'group':
+        #         pass
                 
 
         # perform an error check on mask and (optionally) fix any problems
@@ -293,11 +315,13 @@ def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
     
 ############### image plotting ##############
     
-def display(img, contours=None):
+def display(img, contours=None, coord_format='y,x'):
     if img.dtype == np.bool_:
         # convert binay mask to image
         gray = img.astype(np.float32)
         img = cv2.cvtColor(gray,cv2.COLOR_GRAY2RGB)
+        
+    h, w = img.shape
     
     # Display the image and plot all contours found
     fig, ax = plt.subplots()
@@ -306,6 +330,14 @@ def display(img, contours=None):
         # ax.imshow(img)
         for c in contours:
             px = c[:, 1]; py = c[:, 0]
+            if coord_format == ('x,y'):
+                py, px = px, py
+                
+            if np.any(px > w-1):
+                print('x error')
+            if np.any(py>h-1):
+                print('y error')
+                
             ax.plot(px, py, 'b', linewidth=2)
     ax.axis('image')
     ax.set_xticks([])
