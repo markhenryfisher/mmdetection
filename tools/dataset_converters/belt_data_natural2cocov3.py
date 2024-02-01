@@ -19,7 +19,7 @@ import warnings
 from PIL import Image
 from skimage import measure, morphology
 from image_labelling_tool import labelling_tool
-from mmengine.fileio import dump
+from mmengine.fileio import dump, load
 from mmengine.utils import track_iter_progress
 
 import matplotlib.pyplot as plt
@@ -170,7 +170,44 @@ def filter_masks(mask, idx, threshold=30, debug=False):
     out_masks = np.array((ok_masks))
     
     return out_masks, out_obj_ids
+
+
+def clip_to_image(region, img_size):
+    w, h = img_size    
+    region[:,0] = np.clip(region[:,0], a_min=0, a_max=w-1)
+    region[:,1] = np.clip(region[:,1], a_min=0, a_max=w-1)
+    
+    return region
+    
+def unpack_polygon(label, img_size):
+    regions_json = [label['vertices']]
+    regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
+    for i, region in enumerate(regions):
+        regions[i] = clip_to_image(region, img_size)
+    
+    return regions
         
+
+def parse_label(mask, label):
+    h, w = mask.shape
+        
+    # simple polygon
+    if label['label_type'] in PRIMITIVE_LABELS:
+        print(label['label_type'])
+        print(label['object_id'])
+        regions = unpack_polygon(label, (w, h))
+        display(mask, regions, 'x,y')
+    # group of polygon 'components'
+    elif label['label_type'] in COMPOUND_LABELS:
+        print(label['label_type'])
+        print(label['object_id'])
+        for component in label['component_models']:
+            print(component['label_type'])
+            print(component['object_id'])
+            parse_label(mask, component)
+    else:
+        raise RuntimeError('Unknown label type')                  
+         
 
 def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
     img_list = list(sorted(os.listdir(image_prefix)))
@@ -201,28 +238,37 @@ def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
         # render instances (line 1620)
         mask, cls_map = limg.render_label_instances(FISH_CLASSES, multichannel_mask=False)
 
-        # labels = labelling_tool.ImageLabels.from_json(labels)
-        labels = labelling_tool.ImageLabels.from_file(label_path)
+        # labels = labelling_tool.ImageLabels.from_file(label_path)
         
+        # for label in labels:
+        #     label_json = label.to_json()
+        #     # simple polygon
+        #     if label_json['label_type'] in PRIMITIVE_LABELS:
+        #         print(label_json['label_type'])
+        #         print(label_json['object_id'])
+        #         for region in label.regions:
+        #             display(mask, [region], 'x,y')
+        #     # group of polygons
+        #     elif label_json['label_type'] in COMPOUND_LABELS:
+        #         print(label_json['label_type'])
+        #         for comp_label in label.component_labels:
+        #             label_json = comp_label.to_json()
+        #             print(label_json['label_type'])
+        #             print(label_json['object_id'])
+        #             for region in comp_label.regions:
+        #                 print(label_json['label_type'])
+        #                 print(label_json['object_id'])                    
+        #                 display(mask, [region], 'x,y')
+            # else:
+            #     print('Unkown Label Type')
+        
+        labels = load(label_path)
         for label in labels:
-            label_json = label.to_json()
-            if label_json['label_type'] in PRIMITIVE_LABELS:
-                print(label_json['label_type'])
-                for region in label.regions:
-                    display(mask, [region], 'x,y')
-            elif label_json['label_type'] in COMPOUND_LABELS:
-                print(label_json['label_type'])
-                for comp_label in label.component_labels:
-                    label_json = comp_label.to_json()
-                    print(label_json['label_type'])
-                    for region in comp_label.regions:
-                        display(mask, [region], 'x,y')
+            parse_label(mask, label)
 
-                    
 
                 
-            else:
-                print('Unkown Label Type')
+        
         
         if debug:
             # convert binay mask to image
