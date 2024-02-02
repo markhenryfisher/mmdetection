@@ -4,16 +4,18 @@ Created on Thu Feb  1 10:44:30 2024
 
 @author: mhf
 """
+import argparse
 import os
+import time
 import numpy as np
 import cv2
 from PIL import Image
 from image_labelling_tool import labelling_tool
-from mmengine.fileio import dump, load
+from mmengine.fileio import load
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-BELTS = ['MRV SCOTIA']
+REJECT = ['vlc-record-2018-05-30-15h22m13s-ABSENT-ABSENT-180122_141435-C4H-238-180208_095732_000.MP4-__000589__0020.png']
 
 # All fish classes found within my dataset, used for segmentation
 FISH_CLASSES = ['fish_mackerel', 'fish_redgurnard', 'fish_catfish', 'fish_gurnard', 'fish_haddock', 'fish_ling',
@@ -41,6 +43,17 @@ def label_to_image(label):
 
 def image_to_label(image):
     return image.replace(IMAGE_SUFFIX, LABEL_SUFFIX).replace(IMAGES_FOLDER_NAME, LABELS_FOLDER_NAME)
+
+############### arg parser ##################
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Browse and confirm catchmonitor annotations')
+    parser.add_argument('dataset', help='belt data file path')
+    parser.add_argument('belt', help='belt name, e.g. MRV SCOTIA')
+
+    args = parser.parse_args()
+
+    return args
 
 ############### image plotting ##############
     
@@ -112,8 +125,8 @@ def display(img, contours=None, show=True):
 
     if show:    
         plt.show()
-    else:
-        fig.clear()
+    
+    fig.clear()
         
     return out_img
 
@@ -125,14 +138,6 @@ def clip_to_image(regions, img_size):
         regions[i] = region
     
     return regions
-    
-# def unpack_polygon(label, img_size):
-#     regions_json = [label['vertices']]
-#     regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
-#     for i, region in enumerate(regions):
-#         regions[i] = clip_to_image(region, img_size)
-    
-#     return regions
 
 def unpack_polygon(label_json):
     if 'vertices' in label_json:
@@ -153,7 +158,7 @@ def display_label(mask, label):
         print('{} {}'.format(label['label_type'], label['object_id']))
         regions = unpack_polygon(label)
         regions = clip_to_image(regions, (w,h))
-        mask = display(mask, regions, show=False)
+        mask = display(mask, regions, show=True)
     # group of polygon 'components'
     elif label['label_type'] in COMPOUND_LABELS:
         print(label['label_type'])
@@ -192,15 +197,43 @@ def show_annotation(img_folder, annotation_folder, img_filename):
     
 
 if __name__ == '__main__':
-    image_prefix = './data/ruth/datasets/belt_data_natural/label_frames'
-    annotation_prefix = './data/ruth/datasets/belt_data_natural/seg_labels_json'
-    out_prefix = './data/belt_data_natural'
+    # args = parse_args()    
+    # dataset_root = args.dataset
+    # belt = args.belt
+    dataset_root = './data/ruth/datasets/belt_data_natural/'
+
+    belt = 'MRV SCOTIA'
     
-    for belt in BELTS:
-        img_folder = os.path.join(image_prefix, belt)
-        annotation_folder = os.path.join(annotation_prefix, belt)
-        img_list = list(sorted(os.listdir(img_folder)))
-        
-        for i in range(len(img_list)):
-            img_filename = img_list[i]
-            show_annotation(img_folder, annotation_folder, img_filename)
+    image_folder = os.path.join(dataset_root, 'label_frames', belt)
+    annotation_folder = os.path.join(dataset_root, 'seg_labels_json', belt)
+    
+    img_list = list(sorted(os.listdir(image_folder)))
+    
+    print('Showing {} annotations'.format(len(img_list)))
+    input('press any key: ')
+    
+
+    reject_images = []
+    for i in range(len(img_list)):
+        img_filename = img_list[i]
+
+        img_filename = 'vlc-record-2018-05-30-15h22m13s-ABSENT-ABSENT-180122_141435-C4H-238-180208_095732_000.MP4-__000589__0020.png'
+              
+        show_annotation(image_folder, annotation_folder, img_filename)
+        user_input = input('Accept {} ? [default: y)es]:  '.format(img_filename))
+        if len(user_input) == 0 or user_input in ['y', 'yes']: 
+            user_input = 'y'
+        else:
+            reject_images.append(img_filename)
+            
+        if i > 0 and i % 10 == 0:
+            print('\n\nCurrent rejects:')
+            for reject in reject_images:
+                print('index: {}, File: {}'.format(i, reject))
+            input('Press any key')
+            
+            
+    print('\n\nFinal rejects:')
+    for reject in reject_images:
+        print(reject)
+    print('\n')   
