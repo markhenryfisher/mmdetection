@@ -14,10 +14,21 @@ import argparse
 import os
 import numpy as np
 import cv2
+import random
 from PIL import Image
-from mmengine.fileio import load
+from mmengine.fileio import load, dump
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+
+# All fish classes found within my dataset, used for segmentation
+FISH_CLASSES = ['fish_mackerel', 'fish_redgurnard', 'fish_catfish', 'fish_gurnard', 'fish_haddock', 'fish_ling',
+                'fish_lemonsole', 'fish_monk', 'fish_dogfish', 'fish_commondab', 'fish_squid', 'fish_megrim',
+                'fish_doversole', 'fish_herring', 'fish_unknown', 'fish_small', 'fish_horsemackerel', 'fish_argentines',
+                'fish_skate_ray', 'fish_longroughdab', 'fish_plaice', 'fish_greygurnard', 'fish_flat_generic',
+                'fish_partial', 'fish_whiting', 'fish_saithe', 'fish_norwaypout', 'fish_misc', 'fish_bib',
+                'fish_boar_fish', 'fish', 'whole_fish', 'fish_seabass', 'fish_commondragonet', 'fish_brill',
+                'fish_cod', 'fish_hake', 'fish_john_dory', 'fish_multiple']
+
 
 ############## folder renaming utils ##########
 # Constants for file / folder renaming
@@ -122,6 +133,19 @@ def display(img, contours=None, show=True):
         
     return out_img
 
+def generate_splits(img_list):
+    # randomize dataset and split into train and test 
+    n_train = 9 * len(img_list) // 10 
+    n_test = len(img_list) - n_train  
+    idxs = list(range(len(img_list)))
+    # get the same random behaviour every time
+    random.seed(1)
+    random.shuffle(idxs)
+    train_idxs = idxs[:n_train]
+    test_idxs = idxs[-n_test:]
+    
+    return train_idxs, test_idxs
+
 
 def fix_polygon_vertices(regions, img_size):
     
@@ -181,6 +205,27 @@ def display_label(mask, label):
         raise RuntimeError('Unknown label type')
         
     return mask
+
+def convert_label(mask, label):
+    h, w = mask.shape[:2]
+        
+    # simple polygon
+    if label['label_type'] in PRIMITIVE_LABELS:
+        print('{} {}'.format(label['label_type'], label['object_id']))
+        regions = unpack_polygon(label)
+        regions = fix_polygon_vertices(regions, (w,h))
+    # group of polygon 'components'
+    elif label['label_type'] in COMPOUND_LABELS:
+        print(label['label_type'])
+        print(label['object_id'])
+        for component in label['component_models']:
+            print(component['label_type'])
+            print(component['object_id'])
+            regions = convert_label(mask, component)
+    else:
+        raise RuntimeError('Unknown label type')
+        
+    return regions
         
 
 def show_annotation(img_folder, annotation_folder, img_filename):
@@ -197,48 +242,107 @@ def show_annotation(img_folder, annotation_folder, img_filename):
         
     display(img)
     plt.close()
- 
+    
+def convert2coco(idxs, img_folder, out_file):
+    img_list = list(sorted(os.listdir(img_folder)))
+    
+    annotations = []
+    images = []
+    obj_count = 0  
+#    for n in range(len(idxs)):
+    for n in range(0,1):
+        idx = idxs[n]        
+
+        img_filename = img_list[idx]
+        img_path = os.path.join(img_folder, img_filename)
+        lbl_path = image_to_label(img_path) 
+      
+        img = Image.open(img_path).convert("RGB")
+        
+        labels = load(lbl_path)
+        for label in labels:
+            has_poly = False
+            regions = convert_label(np.array(img), label)
+                
+                
+            for c in regions:
+                has_poly = True
+                px = c[:, 0]; py = c[:, 1]
+                
+                poly = [(x, y) for x, y in zip(px, py)]
+                poly = [p for x in poly for p in x]
+
+                
+                x_min = np.min(px)
+                x_max = np.max(px)
+                y_min = np.min(py)
+                y_max = np.max(py)
+
+                data_anno = dict(
+                    image_id=idx,
+                    id=obj_count,
+                    category_id=0,
+                    bbox=[x_min, y_min, x_max - x_min, y_max - y_min],
+                    area=(x_max - x_min) * (y_max - y_min),
+                    segmentation=[poly],
+                    iscrowd=0)
+            
+                annotations.append(data_anno)
+                obj_count += 1        
+        # image contains at least one contour
+        if has_poly:
+            # add image to list
+            basename, __ = os.path.splitext(img_filename)
+            jpg_filename = basename + '.jpg'
+            # images.append(dict(id=idx, file_name=jpg_filename, height=height, width=width))
+            # save jpg image 
+            fullfile = os.path.join(os.path.dirname(out_file), jpg_filename)
+            if not os.path.isfile(fullfile):
+                img.save(fullfile)
+     
+    coco_format_json = dict(
+    images=images,
+    annotations=annotations,
+    categories=[{
+        'id': 0,
+        'name': 'fish_unknown'
+    }])
+    
+    dump(coco_format_json, out_file)         
+
     
 if __name__ == '__main__':
-    args = parse_args()    
-    dataset_root = args.dataset
-    belt = args.belt
-    # dataset_root = './data/ruth/datasets/belt_data_natural/'
+    # args = parse_args()    
+    # dataset_root = args.dataset
+    # belt = args.belt
+    dataset_root = './data/ruth/datasets/belt_data_natural/'
+    out_folder = './data/belt_data_natural'
 
-    # belt = 'MRV SCOTIA'
+
+    belt = 'MRV SCOTIA'
     
     image_folder = os.path.join(dataset_root, 'label_frames', belt)
     annotation_folder = os.path.join(dataset_root, 'seg_labels_json', belt)
     
     img_list = list(sorted(os.listdir(image_folder)))
+    train_idxs, val_idxs = generate_splits(img_list)
     
-    print('Showing {} annotations'.format(len(img_list)))
-    input('Press ENTER to continue: ')
-    
+    # make a dirs for coco train/test
+    belt_prefix = os.path.join(out_folder, belt)
+    train_prefix = os.path.join(belt_prefix, 'train')
+    if not os.path.exists(train_prefix):
+        os.makedirs(train_prefix)
+    val_prefix = os.path.join(belt_prefix, 'val')
+    if not os.path.exists(val_prefix):
+        os.makedirs(val_prefix)         
+         
+    # convert2coco(train_idxs, 
+    #               input_image_prefix, 
+    #               input_annotation_prefix,
+    #               out_file = os.path.join(train_prefix, 'annotation_coco.json'))
 
-    reject_images = []
-    for i in range(len(img_list)):
-        img_filename = img_list[i]              
-        show_annotation(image_folder, annotation_folder, img_filename)
-        user_input = input('Accept {} ? [default: y)es]:  '.format(img_filename))
-        if len(user_input) == 0 or user_input in ['y', 'yes']: 
-            user_input = 'y'
-        else:
-            reject_images.append(img_filename)
-            
-        if i > 0 and i % 10 == 0:
-            print('\n\nCurrent rejects:')
-            for reject in reject_images:
-                print('index: {}, File: {}'.format(i, reject))
-            user_input = input('Continue ? [default: y)es]: ' )
-            if len(user_input) == 0 or user_input in ['y', 'yes']: 
-                pass
-            else:
-                break
-                
-            
-            
-    print('\n\nFinal rejects:')
-    for reject in reject_images:
-        print(reject)
-    print('\n')   
+    convert2coco(val_idxs, 
+                 image_folder, 
+                 out_file = os.path.join(val_prefix, 'annotation_coco.json'))
+
+     
