@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Shpw belt data annotation (UEA json annotation format).
+Shpw and fix belt data annotation (UEA json annotation format).
 e.g. Usage: 
     python belt_data_browser.py "./data/ruth/datasets/belt_data_natural" "MRV SCOTIA" 
 
@@ -8,16 +8,19 @@ Created on Thu Feb  1 10:44:30 2024
 
 @author: mhf
 @filename: belt_data_browser.py
-last update: 03.02.24
+last update: 05.02.24
 """
 import argparse
 import os
 import numpy as np
 import cv2
 from PIL import Image
-from mmengine.fileio import load
+from mmengine.fileio import load, dump
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+
+############## region verify area threshold ###
+MIN_AREA = 20
 
 ############## folder renaming utils ##########
 # Constants for file / folder renaming
@@ -149,16 +152,58 @@ def fix_polygon_vertices(regions, img_size):
     return regions
 
 
+# def unpack_polygon(label_json):
+#     if 'vertices' in label_json:
+#         regions_json = [label_json['vertices']]
+#     else:
+#         regions_json = label_json['regions']
+        
+#     regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
+
+#     return regions
+
 def unpack_polygon(label_json):
+    
+    def verify_area(regions):
+        for c in regions:
+            px = c[:, 0]; py = c[:, 1]
+            
+            x_min = np.min(px)
+            x_max = np.max(px)
+            y_min = np.min(py)
+            y_max = np.max(py)
+            
+            area = (x_max - x_min) * (y_max - y_min)
+            
+            if area < MIN_AREA:
+                print('Unpacking Error: Region area too small')
+                low_area = True
+            else:
+                low_area = False
+        return low_area
+        
+    def verify_regions(regions_json):
+        for region in regions_json:
+            if len(region) > 3:
+                low_vertex = False
+            else:
+                print('Unpacking Error: Insufficient Vertices')
+                low_vertex = True                              
+        return low_vertex
+        
     if 'vertices' in label_json:
         regions_json = [label_json['vertices']]
     else:
         regions_json = label_json['regions']
-        
-    regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
 
-    return regions
-      
+    vertex_error = verify_regions(regions_json)        
+    regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
+    area_error = verify_area(regions)
+    
+    if vertex_error or area_error:
+        regions = []
+    
+    return regions      
 
 def display_label(mask, label):
     h, w = mask.shape[:2]
@@ -167,23 +212,34 @@ def display_label(mask, label):
     if label['label_type'] in PRIMITIVE_LABELS:
         print('{} {}'.format(label['label_type'], label['object_id']))
         regions = unpack_polygon(label)
-        regions = fix_polygon_vertices(regions, (w,h))
-        mask = display(mask, regions, show=False)
+        if regions:
+            regions = fix_polygon_vertices(regions, (w,h))
+            mask = display(mask, regions, show=False)
+        else:
+            label = []
     # group of polygon 'components'
     elif label['label_type'] in COMPOUND_LABELS:
         print(label['label_type'])
         print(label['object_id'])
+        out_components = []
         for component in label['component_models']:
             print(component['label_type'])
             print(component['object_id'])
-            mask = display_label(mask, component)
+            mask, regions = display_label(mask, component)
+            if not regions:
+                print('Error in {}: {}'.format(label['label_type'], label['object_id']))
+            else:
+                out_components.append(component)
+        label['component_models'] = out_components
     else:
-        raise RuntimeError('Unknown label type')
+        raise RuntimeError('Unknown label type')        
         
-    return mask
+    return mask, label
         
 
 def show_annotation(img_folder, annotation_folder, img_filename):
+    out_labels_json = []
+    
     img_path = os.path.join(img_folder, img_filename)
     lbl_path = image_to_label(img_path) 
     
@@ -192,20 +248,27 @@ def show_annotation(img_folder, annotation_folder, img_filename):
     width, height = img.size 
         
     labels = load(lbl_path)
-    for label in labels:
-        img = display_label(np.array(img), label)
-        
+    for idx, label in enumerate(labels):
+        img, label = display_label(np.array(img), label)
+        if label:
+            out_labels_json.append(label)
+        else:
+            pass
+                    
     display(img)
     plt.close()
+    
+    print('Overwriting: {}'.format(img_filename))
+    dump(out_labels_json, lbl_path) 
  
     
 if __name__ == '__main__':
-    args = parse_args()    
-    dataset_root = args.dataset
-    belt = args.belt
-    # dataset_root = './data/ruth/datasets/belt_data_natural/'
+    # args = parse_args()    
+    # dataset_root = args.dataset
+    # belt = args.belt
+    dataset_root = './data/ruth/datasets/belt_data_natural/'
 
-    # belt = 'MRV SCOTIA'
+    belt = 'MRV SCOTIA'
     
     image_folder = os.path.join(dataset_root, 'label_frames', belt)
     annotation_folder = os.path.join(dataset_root, 'seg_labels_json', belt)

@@ -1,55 +1,139 @@
 # -*- coding: utf-8 -*-
 """
-belt_data_natural dataset converter
-Created on Mon Jan 22 13:12:42 2024
+Shpw belt data annotation (UEA json annotation format).
+e.g. Usage: 
+    python belt_data_browser.py "./data/ruth/datasets/belt_data_natural" "MRV SCOTIA" 
 
-bugs: Only handles annotations involving single regions. See line 86.
+Created on Thu Feb  1 10:44:30 2024
 
-Note: Launch in working directory 'mmdetection'
 @author: mhf
-@filename: belt_data_natural2coco.py
-@last_updated: 24.01.24
+@filename: belt_data_browser.py
+last update: 03.02.24
 """
+import argparse
 import os
+import numpy as np
 import cv2
 import random
-import numpy as np
-import scipy as sp
-import warnings
 from PIL import Image
-from skimage import measure, morphology
-from image_labelling_tool import labelling_tool
-from mmengine.fileio import dump, load
-from mmengine.utils import track_iter_progress
-
+from mmengine.fileio import load, dump
 import matplotlib.pyplot as plt
-
-# BELTS = ['BOY JOHN INS110', 'Carhelmar', 'CRYSTAL SEA SS118',
-#          'GLENUGIE PD347', 'LAPWING PD972', 'MRV SCOTIA', 'SUMMER DAWN PD97']
-
-BELTS = ['MRV SCOTIA']
-
+import matplotlib.patches as patches
 
 # All fish classes found within my dataset, used for segmentation
-FISH_CLASSES = ['fish_mackerel', 'fish_redgurnard', 'fish_catfish', 'fish_gurnard', 'fish_haddock', 'fish_ling',
-                'fish_lemonsole', 'fish_monk', 'fish_dogfish', 'fish_commondab', 'fish_squid', 'fish_megrim',
-                'fish_doversole', 'fish_herring', 'fish_unknown', 'fish_small', 'fish_horsemackerel', 'fish_argentines',
-                'fish_skate_ray', 'fish_longroughdab', 'fish_plaice', 'fish_greygurnard', 'fish_flat_generic',
-                'fish_partial', 'fish_whiting', 'fish_saithe', 'fish_norwaypout', 'fish_misc', 'fish_bib',
-                'fish_boar_fish', 'fish', 'whole_fish', 'fish_seabass', 'fish_commondragonet', 'fish_brill',
-                'fish_cod', 'fish_hake', 'fish_john_dory', 'fish_multiple']
-# All fish classes which could be used in the synthetic images (whole, manually annotated examples in dataset). Used
-# for classification
-CLS_FISH_CLASSES = ['fish_mackerel', 'fish_redgurnard', 'fish_catfish', 'fish_haddock', 'fish_ling',
-                    'fish_lemonsole', 'fish_monk', 'fish_dogfish', 'fish_commondab', 'fish_megrim',
-                    'fish_doversole', 'fish_herring', 'fish_horsemackerel', 'fish_argentines',
-                    'fish_skate_ray', 'fish_longroughdab', 'fish_plaice', 'fish_greygurnard',
-                    'fish_whiting', 'fish_saithe', 'fish_norwaypout', 'fish_bib', 'fish_boar_fish', 'fish_brill',
-                    'fish_seabass', 'fish_cod', 'fish_hake', 'fish_john_dory', 'fish_commondragonet']
+# FISH_CLASSES = ['fish_mackerel', 'fish_redgurnard', 'fish_catfish', 'fish_gurnard', 'fish_haddock', 'fish_ling',
+#                 'fish_lemonsole', 'fish_monk', 'fish_dogfish', 'fish_commondab', 'fish_squid', 'fish_megrim',
+#                 'fish_doversole', 'fish_herring', 'fish_unknown', 'fish_small', 'fish_horsemackerel', 'fish_argentines',
+#                 'fish_skate_ray', 'fish_longroughdab', 'fish_plaice', 'fish_greygurnard', 'fish_flat_generic',
+#                 'fish_partial', 'fish_whiting', 'fish_saithe', 'fish_norwaypout', 'fish_misc', 'fish_bib',
+#                 'fish_boar_fish', 'fish', 'whole_fish', 'fish_seabass', 'fish_commondragonet', 'fish_brill',
+#                 'fish_cod', 'fish_hake', 'fish_john_dory', 'fish_multiple']
 
-PRIMITIVE_LABELS = ['polygon', 'box']
+# minimum area of a region (smaller areas raise an error)
+MIN_AREA = 20
+
+############## folder renaming utils ##########
+# Constants for file / folder renaming
+IMAGES_FOLDER_NAME = 'label_frames'
+LABELS_FOLDER_NAME = 'seg_labels_json'
+IMAGE_SUFFIX = '.png'
+LABEL_SUFFIX = '__labels.json'
+
+# label types
+PRIMITIVE_LABELS = ['polygon']
 COMPOUND_LABELS = ['group']
 
+def label_to_image(label):
+    return label.replace(LABEL_SUFFIX, IMAGE_SUFFIX).replace(LABELS_FOLDER_NAME, IMAGES_FOLDER_NAME)
+
+def image_to_label(image):
+    return image.replace(IMAGE_SUFFIX, LABEL_SUFFIX).replace(IMAGES_FOLDER_NAME, LABELS_FOLDER_NAME)
+
+############### arg parser ##################
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Browse and confirm catchmonitor annotations')
+    parser.add_argument('dataset', help='belt data file path')
+    parser.add_argument('belt', help='belt name, e.g. MRV SCOTIA')
+
+    args = parser.parse_args()
+
+    return args
+
+############### image plotting ##############
+    
+def display(img, contours=None, show=True):
+    """
+    render / display an image (with optional contour plot)
+
+    Parameters
+    ----------
+    img : TYPE
+        DESCRIPTION.
+    contours : TYPE, optional
+        DESCRIPTION. The default is None.
+    show : TYPE, optional
+        DESCRIPTION. The default is True.
+
+    Returns
+    -------
+    out_img : np array (RGB image)
+        DESCRIPTION.
+
+    """
+    if img.dtype == np.bool_:
+        # convert binay mask to image
+        gray = img.astype(np.float32)
+        img = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)       
+        
+    h, w = img.shape[:2]
+    
+    # Display the image and plot all contours found
+    fig, ax = plt.subplots()
+
+    # Display image so it nicely fills the figure
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)    
+    # Get the size of the data
+    dim = np.array(img.shape[:2][::-1]) + np.array([0, 0.5])
+    # Set the figure sizes in inches
+    fig.set_size_inches(dim / fig.dpi)
+   
+    ax.imshow(img)
+    if contours is not None:
+        # ax.imshow(img)
+        for c in contours:
+            px = c[:, 0]; py = c[:, 1]
+            
+            x_min = np.min(px)
+            x_max = np.max(px)
+            y_min = np.min(py)
+            y_max = np.max(py)
+                
+            # Create a Rectangle patch
+            rect = patches.Rectangle((x_min, y_min), x_max-x_min, y_max-y_min, linewidth=2, edgecolor='r', facecolor='none')
+
+            # Add the patch to the Axes
+            ax.add_patch(rect)
+                
+            ax.plot(px, py, 'w', linewidth=2)
+    ax.axis('image')
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+    
+    s, (width, height) = fig.canvas.print_to_buffer() 
+    
+    # Convert to a NumPy array.
+    out_img = np.frombuffer(s, np.uint8).reshape((height, width, 4))    
+    out_img = cv2.cvtColor(out_img, cv2.COLOR_RGBA2RGB)
+    out_img = cv2.resize(out_img, (w, h))
+
+    if show:    
+        plt.show()
+    
+    plt.close(fig)
+        
+    return out_img
 
 def generate_splits(img_list):
     # randomize dataset and split into train and test 
@@ -60,143 +144,111 @@ def generate_splits(img_list):
     random.seed(1)
     random.shuffle(idxs)
     train_idxs = idxs[:n_train]
-    test_idxs = idxs[-n_test:]  
+    test_idxs = idxs[-n_test:]
     
-    return train_idxs, test_idxs
+    train_list = [img_list[x] for x in train_idxs]
+    val_list = [img_list[x] for x in test_idxs]
+    
+    return train_list, val_list
 
-def remove_border(mask):
-    """
-    masks that touch the border are problematic 
-    """
-    # force border to 0 (to make contour complete)
-    height, width = mask.shape    
-    mask[0, :] = 0; mask[height-1, :] = 0 
-    mask[:, 0] = 0; mask[:, width-1] = 0
-    
-    return mask
 
-def get_contour(mask, debug=True):
+def fix_polygon_vertices(regions, img_size):
     
-    contours = measure.find_contours(mask, fully_connected='high')
-      
-    # No contours    
-    if len(contours) == 0:
-        return None
+    def clip_polygon(region, img_size):
+        w, h = img_size 
+        region[:,0] = np.clip(region[:,0], a_min=0, a_max=w-1)
+        region[:,1] = np.clip(region[:,1], a_min=0, a_max=h-1)
+        
+        return region
     
-    # simplify and close contours
-    for idx, c in enumerate(contours):
-        # round to nearest integer
-        c = np.rint(c)
+    def close_polygon(region):    
+        region = np.rint(region)
         # close the contour
-        closed = c[0] == c[-1]
+        closed = region[0,:] == region[-1,:]
         if not closed.all():
-            c = np.append(c, c[0])       
-        # simplify the contour, tollerance = 1.0 pixel
-        contours[idx] = measure.approximate_polygon(c, 2.0)
-        
-    if debug:     
-        display(mask, contours)
-        
-    return contours
-     
-
-def poly2coco(mask):
-    """
-    get polygon contours, and convert to coco format
-
-    """ 
-    contours = get_contour(mask)
-    if contours is None:
-        return None
-    elif len(contours) > 1:
-        print('Two contours')
-    for idx, c in enumerate(contours):
-        px = c[:, 1]; py = c[:, 0]        
-        # poly = [(x + 0.5, y + 0.5) for x, y in zip(px, py)]
-        poly = [(x, y) for x, y in zip(px, py)]
-        poly = [p for x in poly for p in x]
-        contours[idx] = poly
-    
-    return contours
-
-def filter_masks(mask, idx, threshold=30, debug=False):
-    """
-    Clean up output of image labeller:
-    1. Split the color-encoded mask into a set
-    of binary masks.
-    2. Fill holes in binary masks.
-    3. Remove small objects (area <= threshold).
-    
-    """ 
-    # remove the border
-    mask = remove_border(mask)
-    # instances are encoded as different colors
-    obj_ids = np.unique(mask)
-    # first id is the background, so remove it
-    obj_ids = obj_ids[1:]
-
-    # split the color-encoded mask into a set
-    # of binary masks
-    masks = mask == obj_ids[:, None, None] 
-    
-    ok_masks = []
-    for mask in masks:
-        # fill holes
-        mask = sp.ndimage.binary_fill_holes(mask)
-        
-        # re-label mask
-        sub_mask = measure.label(mask, background=0)
-
-        props = measure.regionprops(sub_mask.astype(np.uint8))
-        
-        temp_mask = np.zeros_like(mask)
-        for p in props:
-            area = p.area
-            if area > threshold:
-                lbl = p.label
-                temp_mask[sub_mask==lbl] = True
-
-            else:
-                warnings.warn("Index={}: Removing small object, area = {}".format(idx, area))
-
-        # add temp_mask to ok_masks 
-        if np.any(temp_mask):
-            if debug:
-                display(temp_mask)
-            ok_masks.append(temp_mask)            
+            region = np.vstack([region, region[0,:]])
             
-        
-    out_obj_ids = np.array((list(range(1, len(ok_masks)+1))), dtype=np.int32) 
-    out_masks = np.array((ok_masks))
-    
-    return out_masks, out_obj_ids
-
-
-def clip_to_image(region, img_size):
-    w, h = img_size    
-    region[:,0] = np.clip(region[:,0], a_min=0, a_max=w-1)
-    region[:,1] = np.clip(region[:,1], a_min=0, a_max=w-1)
-    
-    return region
-    
-def unpack_polygon(label, img_size):
-    regions_json = [label['vertices']]
-    regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
+        return region
+                
     for i, region in enumerate(regions):
-        regions[i] = clip_to_image(region, img_size)
-    
-    return regions
+        region = close_polygon(region)
+        region = clip_polygon(region, img_size)
+        regions[i] = region
         
+    return regions
 
-def parse_label(mask, label):
-    h, w = mask.shape
+
+
+
+def unpack_polygon(label_json):
+    
+    def verify_area(regions):
+        for c in regions:
+            px = c[:, 0]; py = c[:, 1]
+            
+            x_min = np.min(px)
+            x_max = np.max(px)
+            y_min = np.min(py)
+            y_max = np.max(py)
+            
+            area = (x_max - x_min) * (y_max - y_min)
+            
+            if area < MIN_AREA:
+                raise RuntimeError('Unpacking Error: Region area too small')       
+        return
+        
+    def verify_regions(regions_json):
+        for region in regions_json:
+            if len(region) > 3:
+                pass
+            else:
+                raise RuntimeError('Unpacking Error: Insufficient Vertices')                              
+        return
+        
+    if 'vertices' in label_json:
+        regions_json = [label_json['vertices']]
+    else:
+        regions_json = label_json['regions']
+
+    verify_regions(regions_json)        
+    regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
+    verify_area(regions)
+
+    return regions
+      
+
+# def display_label(mask, label):
+#     h, w = mask.shape[:2]
+        
+#     # simple polygon
+#     if label['label_type'] in PRIMITIVE_LABELS:
+#         print('{} {}'.format(label['label_type'], label['object_id']))
+#         regions = unpack_polygon(label)
+#         regions = fix_polygon_vertices(regions, (w,h))
+#         mask = display(mask, regions, show=False)
+#     # group of polygon 'components'
+#     elif label['label_type'] in COMPOUND_LABELS:
+#         print(label['label_type'])
+#         print(label['object_id'])
+#         for component in label['component_models']:
+#             print(component['label_type'])
+#             print(component['object_id'])
+#             mask = display_label(mask, component)
+#     else:
+#         raise RuntimeError('Unknown label type')
+        
+#     return mask
+
+def convert_label(mask, label, debug=False):
+    h, w = mask.shape[:2]
         
     # simple polygon
     if label['label_type'] in PRIMITIVE_LABELS:
-        print(label['label_type'])
-        print(label['object_id'])
-        regions = unpack_polygon(label, (w, h))
-        display(mask, regions, 'x,y')
+        print('{} {}'.format(label['label_type'], label['object_id']))
+        regions = unpack_polygon(label)
+        regions = fix_polygon_vertices(regions, (w,h))
+        if debug:
+            mask = display(mask, regions, show=True)
     # group of polygon 'components'
     elif label['label_type'] in COMPOUND_LABELS:
         print(label['label_type'])
@@ -204,138 +256,78 @@ def parse_label(mask, label):
         for component in label['component_models']:
             print(component['label_type'])
             print(component['object_id'])
-            parse_label(mask, component)
+            regions = convert_label(mask, component)
     else:
-        raise RuntimeError('Unknown label type')                  
-         
+        raise RuntimeError('Unknown label type')
+        
+    return regions
+        
 
-def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
-    img_list = list(sorted(os.listdir(image_prefix)))
-
+# def show_annotation(img_folder, annotation_folder, img_filename):
+#     img_path = os.path.join(img_folder, img_filename)
+#     lbl_path = image_to_label(img_path) 
+    
+#     # load image
+#     img = Image.open(img_path).convert("RGB")
+#     width, height = img.size 
+        
+#     labels = load(lbl_path)
+#     for label in labels:
+#         img = display_label(np.array(img), label)
+        
+#     display(img)
+#     plt.close()
+    
+def convert2coco(img_list, img_folder, out_file):
+    
     annotations = []
     images = []
-    obj_count = 0       
-    #for n, idx in enumerate(track_iter_progress(idxs)):
-
-    for n in range(10,11):
-        idx = idxs[n]        
-        print('n={}, filename: {}'.format(n, img_list[idx]))
-        # load images
+    obj_count = 0  
+    
+    for idx in range(len(img_list)):
+    # for idx in range(0,7):
         img_filename = img_list[idx]
-        img_path = os.path.join(image_prefix, img_filename)
+        print('idx: {}, File name: {}'.format(idx, img_filename))
+        img_path = os.path.join(img_folder, img_filename)
+        lbl_path = image_to_label(img_path) 
+      
         img = Image.open(img_path).convert("RGB")
         width, height = img.size 
-        
-        # render annotation
-        basename, __ = os.path.splitext(img_filename)
-        json_filename = basename + '__labels.json'
-        label_path = os.path.join(annotation_prefix, json_filename)
-        
-        # initialize class (line 1719)
-        limg = labelling_tool.PersistentLabelledImage(img_path, label_path)
-        # read json and get labels (line 1773) 
-        # labels = limg.labels_json
-        # render instances (line 1620)
-        mask, cls_map = limg.render_label_instances(FISH_CLASSES, multichannel_mask=False)
 
-        # labels = labelling_tool.ImageLabels.from_file(label_path)
         
-        # for label in labels:
-        #     label_json = label.to_json()
-        #     # simple polygon
-        #     if label_json['label_type'] in PRIMITIVE_LABELS:
-        #         print(label_json['label_type'])
-        #         print(label_json['object_id'])
-        #         for region in label.regions:
-        #             display(mask, [region], 'x,y')
-        #     # group of polygons
-        #     elif label_json['label_type'] in COMPOUND_LABELS:
-        #         print(label_json['label_type'])
-        #         for comp_label in label.component_labels:
-        #             label_json = comp_label.to_json()
-        #             print(label_json['label_type'])
-        #             print(label_json['object_id'])
-        #             for region in comp_label.regions:
-        #                 print(label_json['label_type'])
-        #                 print(label_json['object_id'])                    
-        #                 display(mask, [region], 'x,y')
-            # else:
-            #     print('Unkown Label Type')
-        
-        labels = load(label_path)
-        for label in labels:
-            parse_label(mask, label)
-
-
+        labels = load(lbl_path)
+        for i, label in enumerate(labels):
+        #for i in range(6,7):
+            label = labels[i]
+            has_poly = False
+            regions = convert_label(np.array(img), label)
                 
-        
-        
-        if debug:
-            # convert binay mask to image
-            grey_img = mask.astype(np.float64)
-            
-            # Display the image and plot all contours found
-            fig, (ax1, ax2) = plt.subplots(1,2)
-            ax1.imshow(img)
-            ax1.axis('image')
-            ax1.set_xticks([])
-            ax1.set_yticks([])
-            ax2.imshow(grey_img, cmap=plt.cm.gray)
-            ax2.axis('image')
-            ax2.set_xticks([])
-            ax2.set_yticks([])
-            plt.show()
-                        
-        # for lbl in labels:
-        #     print('obj_id: {}'.format(lbl['object_id']))
-        #     if lbl['label_type'] == 'polygon':
-        #         verts = lbl['vertices']
-        #         contour = np.zeros((len(verts), 2), dtype=np.int32)
-        #         for i, coord in enumerate(verts):
-        #             contour[i,1] = int(coord['x'])
-        #             contour[i,0] = int(coord['y'])
-        #         display(mask, [contour])
-        #     elif lbl['label_type'] == 'group':
-        #         pass
                 
-
-        # perform an error check on mask and (optionally) fix any problems
-        # and return a set of binary masks
-        masks, obj_ids = filter_masks(mask, idx)
-        
-        # set flag in case contours are unusable
-        has_poly = False
-        # get bounding box coordinates for each mask
-        num_objs = len(obj_ids)
-        for i in range(num_objs):
-            mask = masks[i]
-            coco_contours = poly2coco(mask)
-            # if mask has polygons
-            if coco_contours is not None: 
+            for c in regions:
                 has_poly = True
+                px = c[:, 0]; py = c[:, 1]
                 
-               
-                # for i, contour in enumerate(coco_contours):
-                #     sub_mask = sub_masks[i]
-                   
-                pos = np.nonzero(mask)
-                x_min = np.min(pos[1])
-                x_max = np.max(pos[1])
-                y_min = np.min(pos[0])
-                y_max = np.max(pos[0])
+                poly = [(x, y) for x, y in zip(px, py)]
+                poly = [p for x in poly for p in x]
+
                 
+                x_min = np.min(px)
+                x_max = np.max(px)
+                y_min = np.min(py)
+                y_max = np.max(py)
+
                 data_anno = dict(
                     image_id=idx,
                     id=obj_count,
                     category_id=0,
                     bbox=[x_min, y_min, x_max - x_min, y_max - y_min],
                     area=(x_max - x_min) * (y_max - y_min),
-                    segmentation=coco_contours,
+                    segmentation=[poly],
                     iscrowd=0)
-                
+            
                 annotations.append(data_anno)
                 obj_count += 1
-            
+                    
         # image contains at least one contour
         if has_poly:
             # add image to list
@@ -346,9 +338,7 @@ def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
             fullfile = os.path.join(os.path.dirname(out_file), jpg_filename)
             if not os.path.isfile(fullfile):
                 img.save(fullfile)
-                
-            
-            
+     
     coco_format_json = dict(
     images=images,
     annotations=annotations,
@@ -357,68 +347,41 @@ def convert2coco(idxs, image_prefix, annotation_prefix, out_file, debug=True):
         'name': 'fish_unknown'
     }])
     
-    dump(coco_format_json, out_file)
-    
-############### image plotting ##############
-    
-def display(img, contours=None, coord_format='y,x'):
-    if img.dtype == np.bool_:
-        # convert binay mask to image
-        gray = img.astype(np.float32)
-        img = cv2.cvtColor(gray,cv2.COLOR_GRAY2RGB)
-        
-    h, w = img.shape
-    
-    # Display the image and plot all contours found
-    fig, ax = plt.subplots()
-    ax.imshow(img)
-    if contours is not None:
-        # ax.imshow(img)
-        for c in contours:
-            px = c[:, 1]; py = c[:, 0]
-            if coord_format == ('x,y'):
-                py, px = px, py
-                
-            if np.any(px > w-1):
-                print('x error')
-            if np.any(py>h-1):
-                print('y error')
-                
-            ax.plot(px, py, 'b', linewidth=2)
-    ax.axis('image')
-    ax.set_xticks([])
-    ax.set_yticks([])
-    plt.show()
-    
+    dump(coco_format_json, out_file)         
 
+    
 if __name__ == '__main__':
-    image_prefix = './data/ruth/datasets/belt_data_natural/label_frames'
-    annotation_prefix = './data/ruth/datasets/belt_data_natural/seg_labels_json'
-    out_prefix = './data/belt_data_natural'
+    # args = parse_args()    
+    # dataset_root = args.dataset
+    # belt = args.belt
+    dataset_root = './data/ruth/datasets/belt_data_natural/'
+    out_folder = './data/belt_data_natural'
+
+
+    belt = 'MRV SCOTIA'
     
-    for belt in BELTS:
-        input_image_prefix = os.path.join(image_prefix, belt)
-        input_annotation_prefix = os.path.join(annotation_prefix, belt)
-        img_list = list(sorted(os.listdir(input_image_prefix)))
-        train_idxs, val_idxs = generate_splits(img_list)
+    image_folder = os.path.join(dataset_root, 'label_frames', belt)
+    annotation_folder = os.path.join(dataset_root, 'seg_labels_json', belt)
+    
+    img_list = list(sorted(os.listdir(image_folder)))
+    train_list, val_list = generate_splits(img_list)
+    
+    # make a dirs for coco train/test
+    belt_prefix = os.path.join(out_folder, belt)
+    train_prefix = os.path.join(belt_prefix, 'train')
+    if not os.path.exists(train_prefix):
+        os.makedirs(train_prefix)
+    val_prefix = os.path.join(belt_prefix, 'val')
+    if not os.path.exists(val_prefix):
+        os.makedirs(val_prefix)   
         
-        # make a dirs for coco train/test
-        belt_prefix = os.path.join(out_prefix, belt)
-        train_prefix = os.path.join(belt_prefix, 'train')
-        if not os.path.exists(train_prefix):
-            os.makedirs(train_prefix)
-        val_prefix = os.path.join(belt_prefix, 'val')
-        if not os.path.exists(val_prefix):
-            os.makedirs(val_prefix)
-            
-        # convert2coco(train_idxs, 
-        #               input_image_prefix, 
-        #               input_annotation_prefix,
-        #               out_file = os.path.join(train_prefix, 'annotation_coco.json'))
+         
+    convert2coco(train_list, 
+                  image_folder,
+                  out_file = os.path.join(train_prefix, 'annotation_coco.json'))
 
-        convert2coco(val_idxs, 
-                     input_image_prefix, 
-                     input_annotation_prefix,
-                     out_file = os.path.join(val_prefix, 'annotation_coco.json'))
+    convert2coco(val_list, 
+                  image_folder, 
+                  out_file = os.path.join(val_prefix, 'annotation_coco.json'))
 
-        
+     
