@@ -6,9 +6,9 @@ Created on Mon Jan 22 13:12:42 2024
 bugs: Only handles annotations involving single regions. See line 86.
 
 Note: Launch in working directory 'mmdetection'
-@author: mhf
-@filename: belt_data_natural2coco.py
-@last_updated: 24.01.24
+@author: mhf@uea.ac.uk
+@filename: belt2coco_from_masks.py
+@last_updated: 06.02.24
 """
 import os
 import cv2
@@ -313,10 +313,10 @@ if __name__ == '__main__':
         if not os.path.exists(val_prefix):
             os.makedirs(val_prefix)
             
-        # convert2coco(train_idxs, 
-        #               input_image_prefix, 
-        #               input_annotation_prefix,
-        #               out_file = os.path.join(train_prefix, 'annotation_coco.json'))
+        convert2coco(train_idxs, 
+                      input_image_prefix, 
+                      input_annotation_prefix,
+                      out_file = os.path.join(train_prefix, 'annotation_coco.json'))
 
         convert2coco(val_idxs, 
                      input_image_prefix, 

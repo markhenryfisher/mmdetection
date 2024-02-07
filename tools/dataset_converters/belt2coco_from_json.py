@@ -6,9 +6,9 @@ e.g. Usage:
 
 Created on Thu Feb  1 10:44:30 2024
 
-@author: mhf
-@filename: belt_data_browser.py
-last update: 03.02.24
+@author: mhf@uea.ac.uk
+@filename: belt2coco_from_json.py
+last update: 06.02.24
 """
 import argparse
 import os
@@ -19,15 +19,6 @@ from PIL import Image
 from mmengine.fileio import load, dump
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-
-# All fish classes found within my dataset, used for segmentation
-# FISH_CLASSES = ['fish_mackerel', 'fish_redgurnard', 'fish_catfish', 'fish_gurnard', 'fish_haddock', 'fish_ling',
-#                 'fish_lemonsole', 'fish_monk', 'fish_dogfish', 'fish_commondab', 'fish_squid', 'fish_megrim',
-#                 'fish_doversole', 'fish_herring', 'fish_unknown', 'fish_small', 'fish_horsemackerel', 'fish_argentines',
-#                 'fish_skate_ray', 'fish_longroughdab', 'fish_plaice', 'fish_greygurnard', 'fish_flat_generic',
-#                 'fish_partial', 'fish_whiting', 'fish_saithe', 'fish_norwaypout', 'fish_misc', 'fish_bib',
-#                 'fish_boar_fish', 'fish', 'whole_fish', 'fish_seabass', 'fish_commondragonet', 'fish_brill',
-#                 'fish_cod', 'fish_hake', 'fish_john_dory', 'fish_multiple']
 
 # minimum area of a region (smaller areas raise an error)
 MIN_AREA = 20
@@ -52,9 +43,10 @@ def image_to_label(image):
 ############### arg parser ##################
 def parse_args():
     parser = argparse.ArgumentParser(
-        description='Browse and confirm catchmonitor annotations')
-    parser.add_argument('dataset', help='belt data file path')
-    parser.add_argument('belt', help='belt name, e.g. MRV SCOTIA')
+        description='Convert json annotation to coco format')
+    parser.add_argument('dataset', nargs='?', help='belt data file path')
+    parser.add_argument('belt', nargs='?', help='belt name, e.g. MRV SCOTIA')
+    parser.add_argument('out_folder', nargs='?', help='output folder')
 
     args = parser.parse_args()
 
@@ -217,28 +209,6 @@ def unpack_polygon(label_json):
     return regions
       
 
-# def display_label(mask, label):
-#     h, w = mask.shape[:2]
-        
-#     # simple polygon
-#     if label['label_type'] in PRIMITIVE_LABELS:
-#         print('{} {}'.format(label['label_type'], label['object_id']))
-#         regions = unpack_polygon(label)
-#         regions = fix_polygon_vertices(regions, (w,h))
-#         mask = display(mask, regions, show=False)
-#     # group of polygon 'components'
-#     elif label['label_type'] in COMPOUND_LABELS:
-#         print(label['label_type'])
-#         print(label['object_id'])
-#         for component in label['component_models']:
-#             print(component['label_type'])
-#             print(component['object_id'])
-#             mask = display_label(mask, component)
-#     else:
-#         raise RuntimeError('Unknown label type')
-        
-#     return mask
-
 def convert_label(mask, label, debug=False):
     h, w = mask.shape[:2]
         
@@ -262,21 +232,6 @@ def convert_label(mask, label, debug=False):
         
     return regions
         
-
-# def show_annotation(img_folder, annotation_folder, img_filename):
-#     img_path = os.path.join(img_folder, img_filename)
-#     lbl_path = image_to_label(img_path) 
-    
-#     # load image
-#     img = Image.open(img_path).convert("RGB")
-#     width, height = img.size 
-        
-#     labels = load(lbl_path)
-#     for label in labels:
-#         img = display_label(np.array(img), label)
-        
-#     display(img)
-#     plt.close()
     
 def convert2coco(img_list, img_folder, out_file):
     
@@ -351,23 +306,24 @@ def convert2coco(img_list, img_folder, out_file):
 
     
 if __name__ == '__main__':
-    # args = parse_args()    
-    # dataset_root = args.dataset
-    # belt = args.belt
-    dataset_root = './data/ruth/datasets/belt_data_natural/'
-    out_folder = './data/belt_data_natural'
+    args = parse_args()    
+    if args.dataset is None:
+        args.dataset = './data/ruth/datasets/belt_data_natural/'
+    if args.belt is None: 
+        args.belt = 'MRV SCOTIA'
+    if args.out_folder is None:
+        args.out_folder = './data/belt_data_natural'
 
 
-    belt = 'MRV SCOTIA'
     
-    image_folder = os.path.join(dataset_root, 'label_frames', belt)
-    annotation_folder = os.path.join(dataset_root, 'seg_labels_json', belt)
+    image_folder = os.path.join(args.dataset, 'label_frames', args.belt)
+    annotation_folder = os.path.join(args.dataset, 'seg_labels_json', args.belt)
     
     img_list = list(sorted(os.listdir(image_folder)))
     train_list, val_list = generate_splits(img_list)
     
     # make a dirs for coco train/test
-    belt_prefix = os.path.join(out_folder, belt)
+    belt_prefix = os.path.join(args.out_folder, args.belt)
     train_prefix = os.path.join(belt_prefix, 'train')
     if not os.path.exists(train_prefix):
         os.makedirs(train_prefix)

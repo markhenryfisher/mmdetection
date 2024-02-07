@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Shpw and fix belt data annotation (UEA json annotation format).
+Show and fix belt data annotation (UEA json annotation format).
 e.g. Usage: 
-    python belt_data_browser.py "./data/ruth/datasets/belt_data_natural" "MRV SCOTIA" 
-
+    python belt_data_browser.py "./data/ruth/datasets/belt_data_natural" "MRV SCOTIA"
+or to fix labels and overwrite (warning!!! backup original first)   
+    python belt_data_browser.py "./data/ruth/datasets/belt_data_natural" "MRV SCOTIA" -o 
+        
 Created on Thu Feb  1 10:44:30 2024
 
-@author: mhf
-@filename: belt_data_browser.py
-last update: 05.02.24
+@author: mhf@uea.ac.uk
+@filename: belt_browser.py
+last update: 07.02.24
 """
 import argparse
 import os
@@ -43,8 +45,10 @@ def image_to_label(image):
 def parse_args():
     parser = argparse.ArgumentParser(
         description='Browse and confirm catchmonitor annotations')
-    parser.add_argument('dataset', help='belt data file path')
-    parser.add_argument('belt', help='belt name, e.g. MRV SCOTIA')
+    parser.add_argument('dataset', nargs='?', help='belt data file path')
+    parser.add_argument('belt', nargs='?', help='belt name, e.g. MRV SCOTIA')
+    parser.add_argument('-o', '--overwrite',
+                    action='store_true')  # on/off flag
 
     args = parser.parse_args()
 
@@ -152,16 +156,6 @@ def fix_polygon_vertices(regions, img_size):
     return regions
 
 
-# def unpack_polygon(label_json):
-#     if 'vertices' in label_json:
-#         regions_json = [label_json['vertices']]
-#     else:
-#         regions_json = label_json['regions']
-        
-#     regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
-
-#     return regions
-
 def unpack_polygon(label_json):
     
     def verify_area(regions):
@@ -237,7 +231,7 @@ def display_label(mask, label):
     return mask, label
         
 
-def show_annotation(img_folder, annotation_folder, img_filename):
+def show_annotation(img_folder, annotation_folder, img_filename, overwrite):
     out_labels_json = []
     
     img_path = os.path.join(img_folder, img_filename)
@@ -257,21 +251,23 @@ def show_annotation(img_folder, annotation_folder, img_filename):
                     
     display(img)
     plt.close()
-    
-    print('Overwriting: {}'.format(img_filename))
-    dump(out_labels_json, lbl_path) 
+
+    if overwrite:
+        print('Overwriting: {}'.format(img_filename))
+        dump(out_labels_json, lbl_path) 
  
     
 if __name__ == '__main__':
-    # args = parse_args()    
-    # dataset_root = args.dataset
-    # belt = args.belt
-    dataset_root = './data/ruth/datasets/belt_data_natural/'
+    args = parse_args()    
+    if args.dataset is None:
+        args.dataset = './data/ruth/datasets/belt_data_natural/'
+    if args.belt is None: 
+        args.belt = 'MRV SCOTIA'
+    overwrite = args.overwrite
 
-    belt = 'MRV SCOTIA'
     
-    image_folder = os.path.join(dataset_root, 'label_frames', belt)
-    annotation_folder = os.path.join(dataset_root, 'seg_labels_json', belt)
+    image_folder = os.path.join(args.dataset, 'label_frames', args.belt)
+    annotation_folder = os.path.join(args.dataset, 'seg_labels_json', args.belt)
     
     img_list = list(sorted(os.listdir(image_folder)))
     
@@ -282,7 +278,7 @@ if __name__ == '__main__':
     reject_images = []
     for i in range(len(img_list)):
         img_filename = img_list[i]              
-        show_annotation(image_folder, annotation_folder, img_filename)
+        show_annotation(image_folder, annotation_folder, img_filename, overwrite)
         user_input = input('Accept {} ? [default: y)es]:  '.format(img_filename))
         if len(user_input) == 0 or user_input in ['y', 'yes']: 
             user_input = 'y'
