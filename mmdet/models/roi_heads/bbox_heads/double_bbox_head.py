@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+# Filename: mmdet\models\roi_heads\bbox_heads\double_bbox_head.py
 from typing import Tuple
 
 import torch.nn as nn
