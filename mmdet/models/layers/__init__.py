@@ -8,6 +8,7 @@ from .csp_layer import CSPLayer
 from .dropblock import DropBlock
 from .ema import ExpMomentumEMA
 from .inverted_residual import InvertedResidual
+from .iou_nms import batched_iou_nms
 from .matrix_nms import mask_matrix_nms
 from .msdeformattn_pixel_decoder import MSDeformAttnPixelDecoder
 from .normed_predictor import NormedConv2d, NormedLinear
@@ -41,7 +42,7 @@ from .transformer import (MLP, AdaptivePadding, CdnQueryGenerator,
 # yapf: enable
 
 __all__ = [
-    'fast_nms', 'multiclass_nms', 'mask_matrix_nms', 'DropBlock',
+    'fast_nms', 'multiclass_nms', 'batched_iou_nms', 'mask_matrix_nms', 'DropBlock',
     'PixelDecoder', 'TransformerEncoderPixelDecoder',
     'MSDeformAttnPixelDecoder', 'ResLayer', 'PatchMerging',
     'SinePositionalEncoding', 'LearnedPositionalEncoding', 'DynamicConv',
