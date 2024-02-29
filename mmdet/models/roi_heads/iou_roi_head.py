@@ -3,17 +3,22 @@
 # from .roi_generator import RoIGenerator
 # from .nms import batched_iou_nms
 # import torch
-from typing import Tuple
-
+from typing import List, Tuple
 from torch import Tensor
 
 from mmdet.registry import MODELS, TASK_UTILS
-from .standard_roi_head import StandardRoIHead
-# from mmdet.legacy import bbox2roi, bbox2result
+from mmdet.structures import DetDataSample, SampleList
 from mmdet.structures.bbox import bbox2roi
-from mmdet.models.utils.iounet_utils import RoIGenerator
+from mmdet.utils import ConfigType, InstanceList
+from ..utils import empty_instances, unpack_gt_instances
 from mmdet.models.layers import batched_iou_nms
+
+from .standard_roi_head import StandardRoIHead
+from mmdet.models.utils.iounet_utils import RoIGenerator
+from mmengine.structures import InstanceData
 import torch
+
+import pdb
 
 
 @MODELS.register_module()
@@ -50,40 +55,76 @@ class IoURoIHead(StandardRoIHead):
             self.iou_assigner = TASK_UTILS.build(self.train_cfg.iou_assigner)
             self.iou_sampler = TASK_UTILS.build(self.train_cfg.iou_sampler)
 
-    def forward_train(self,
-                      x,
-                      img_metas,
-                      proposal_list,
-                      gt_bboxes,
-                      gt_labels,
-                      gt_bboxes_ignore=None,
-                      gt_masks=None):
+    # def forward_train(self,
+    #                   x,
+    #                   img_metas,
+    #                   proposal_list,
+    #                   gt_bboxes,
+    #                   gt_labels,
+    #                   gt_bboxes_ignore=None,
+    #                   gt_masks=None):
+    def loss(self, x: Tuple[Tensor], rpn_results_list: InstanceList,
+              batch_data_samples: List[DetDataSample]) -> dict:
+        """Perform forward propagation and loss calculation of the detection
+        roi on the features of the upstream network.
+
+
+        Args:
+            x (tuple[Tensor]): Tuple of multi-level img features.
+            sampling_results (list["obj:`SamplingResult`]): Sampling results.
+            rpn_results_list (list[:obj:`InstanceData`]): List of region
+                proposals.
+            batch_data_samples (list[:obj:`DetDataSample`]): The batch
+            data samples. It usually includes information such
+            as `gt_instance` or `gt_panoptic_seg` or `gt_sem_seg`.
+            Note:
+            batch_gt_instances (list[:obj:`InstanceData`]): Batch of
+            gt_instance. It usually includes ``bboxes``, ``labels``, and
+            ``masks`` attributes.
+
+
+        Returns:
+            dict: Usually returns a dictionary with keys:
+
+                - `mask_preds` (Tensor): Mask prediction.
+                - `mask_feats` (Tensor): Extract mask RoI features.
+                - `mask_targets` (Tensor): Mask target of each positive\
+                    proposals in the image.
+                - `loss_mask` (dict): A dictionary of mask loss components.
+        """
+        
         ################ the RCNN part #################
-        assert gt_bboxes_ignore is None, 'do not support gt_bboxes_ignore'
+        pdb.set_trace()
+        assert len(rpn_results_list) == len(batch_data_samples)
+        outputs = unpack_gt_instances(batch_data_samples)
+        batch_gt_instances, batch_gt_instances_ignore, batch_img_metas = outputs
+        
         # assign gts and sample proposals
-        if self.with_bbox or self.with_mask:
-            num_imgs = len(img_metas)
-            if gt_bboxes_ignore is None:
-                gt_bboxes_ignore = [None for _ in range(num_imgs)]
-            sampling_results = []
-            for i in range(num_imgs):
-                assign_result = self.bbox_assigner.assign(
-                    proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
-                    gt_labels[i])
-                sampling_result = self.bbox_sampler.sample(
-                    assign_result,
-                    proposal_list[i],
-                    gt_bboxes[i],
-                    gt_labels[i],
-                    feats=[lvl_feat[i][None] for lvl_feat in x])
-                sampling_results.append(sampling_result)
+        num_imgs = len(batch_data_samples)
+        sampling_results = []
+        for i in range(num_imgs):          
+            # This section is copied from StandardIoUHead
+            # rename rpn_results.bboxes to rpn_results.priors
+            rpn_results = rpn_results_list[i]
+            rpn_results.priors = rpn_results.pop('bboxes')
+
+            assign_result = self.bbox_assigner.assign(
+                rpn_results, batch_gt_instances[i],
+                batch_gt_instances_ignore[i])
+            sampling_result = self.bbox_sampler.sample(
+                assign_result,
+                rpn_results,
+                batch_gt_instances[i],
+                feats=[lvl_feat[i][None] for lvl_feat in x])
+            sampling_results.append(sampling_result)
 
         losses = dict()
-        # bbox head forward and loss
+        # This section is copied from StandardRoIHead
+        # bbox head loss
         if self.with_bbox:
-            bbox_results = self._bbox_forward_train(
-                x, sampling_results, gt_bboxes, gt_labels, img_metas)
+            bbox_results = self.bbox_loss(x, sampling_results)
             losses.update(bbox_results['loss_bbox'])
+        
 
         ################ the IoU part #################
         # IoUHead forward and loss
@@ -95,21 +136,43 @@ class IoURoIHead(StandardRoIHead):
         # TODO: it may be more reasonable to let sampler do the sampling
         iou_rois_list = []
         iou_sampling_results = []
-        for i in range(len(img_metas)):
+        # # for i in range(len(img_metas)):
+        for i in range(num_imgs):
+            gt_bboxes = batch_gt_instances[i].bboxes
+            gt_bboxes_ignore = batch_gt_instances_ignore[i].bboxes
+                        
             iou_rois = self.roi_generator.generate_roi(
-                gt_bboxes[i], img_metas[i]['img_shape'][:2])
+                gt_bboxes, batch_img_metas[i]['img_shape'][:2] )
             iou_rois_list.append(iou_rois)
+
+            # refactor iou_rois as InstanceData
+            iou_roi_instances = InstanceData()
+            iou_roi_instances.priors = iou_rois
+            
             iou_assign_result = self.iou_assigner.assign(
-                iou_rois, gt_bboxes[i], gt_bboxes_ignore[i], gt_labels[i])
+                iou_roi_instances, batch_gt_instances[i],
+                batch_gt_instances_ignore[i])
+        
+            # TODO: Why is this called a Pseudo-sampler?
             iou_sampling_result = self.iou_sampler.sample(
                 iou_assign_result,
-                iou_rois,
-                gt_bboxes[i],
-                gt_labels=gt_labels[i],
+                iou_roi_instances,
+                batch_gt_instances[i],
                 feats=[lvl_feat[i][None] for lvl_feat in x])
+        
             iou_sampling_results.append(iou_sampling_result)
-        iou_losses = self._iou_forward_train(
+            
+        # iou_losses = self._iou_forward_train(
+        #     x, iou_sampling_results, gt_bboxes, gt_labels, img_metas)
+
+        # mhf - largely guesswork            
+        gt_bboxes = [x.bboxes for x in batch_gt_instances]
+        gt_labels = [x.labels for x in batch_gt_instances]
+        img_metas = [x for x in batch_img_metas]
+                        
+        iou_losses = self._iou_loss(
             x, iou_sampling_results, gt_bboxes, gt_labels, img_metas)
+        
         losses.update(iou_losses)
         return losses
 
@@ -118,9 +181,17 @@ class IoURoIHead(StandardRoIHead):
         iou_feats = self.bbox_roi_extractor(x[:self.bbox_roi_extractor.num_inputs], rois)
         return self.iou_head(iou_feats)
     
-    def _iou_forward_train(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
+    # def _iou_forward_train(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
+    #     """Forward IoU head and calculate loss"""
+    #     rois = bbox2roi([res.pos_bboxes for res in sampling_results])
+    #     iou_score = self._iou_forward(x, rois)
+    #     loss_iou = self.iou_head.loss(
+    #         iou_score, sampling_results, gt_bboxes, gt_labels, rois, img_metas)
+    #     return dict(loss_iou=loss_iou)
+    
+    def _iou_loss(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
         """Forward IoU head and calculate loss"""
-        rois = bbox2roi([res.pos_bboxes for res in sampling_results])
+        rois = bbox2roi([res.pos_priors for res in sampling_results])
         iou_score = self._iou_forward(x, rois)
         loss_iou = self.iou_head.loss(
             iou_score, sampling_results, gt_bboxes, gt_labels, rois, img_metas)
