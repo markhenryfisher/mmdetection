@@ -1,8 +1,6 @@
-# from mmdet.models import HEADS, StandardRoIHead, build_head
-# from mmdet.core import bbox2roi, bbox2result, build_sampler, build_assigner
-# from .roi_generator import RoIGenerator
-# from .nms import batched_iou_nms
-# import torch
+# -*- coding: utf-8 -*-
+"""iou_roi_head.py: RoI head with a bbox_head and a iou_head."""
+
 from typing import List, Tuple
 from torch import Tensor
 
@@ -19,50 +17,45 @@ from mmengine.structures import InstanceData
 import torch
 
 import pdb
+import time
 
 
 @MODELS.register_module()
 class IoURoIHead(StandardRoIHead):
-    """RoI head with a bbox_head and a iou_head"""
+    """RoIHead for IoUNet.
+    
+    https://github.com/thisisi3/OpenMMLab-IoUNet/blob/main/mmdet/iounet/iou_roi_head.py
+    
+    """
     def __init__(self, *args, iou_head=None, roi_generator=None, **kwargs):
         super(IoURoIHead, self).__init__(*args, **kwargs)
-        assert iou_head is not None, 'IoU head must be present for StandardIoUHead'
-        assert not self.with_shared_head, 'shared head is not supported for now'
-        assert not self.with_mask, 'mask is not supported for now'
-        # mhf
-        # self.iou_head = build_head(iou_head)
+    #     assert iou_head is not None, 'IoU head must be present for StandardIoUHead'
+    #     assert not self.with_shared_head, 'shared head is not supported for now'
+    #     assert not self.with_mask, 'mask is not supported for now'
         self.iou_head = MODELS.build(iou_head)
         self.roi_generator = roi_generator
         if roi_generator is not None:
             self.roi_generator = RoIGenerator(**roi_generator)
 
     def init_assigner_sampler(self):
+        print('Executing IoURoIHead.init_assigner_sampler')
+        time.sleep(10.0)
         self.bbox_assigner = None
         self.bbox_sampler = None
         self.iou_assigner = None
         self.iou_sampler = None
         if self.train_cfg:
-            # mhf refactored
-            # self.bbox_assigner = build_assigner(self.train_cfg.bbox_assigner)
-            # self.bbox_sampler = build_sampler(
-            #     self.train_cfg.bbox_sampler, context=self)
-            # self.iou_assigner = build_assigner(self.train_cfg.iou_assigner)
-            # self.iou_sampler = build_sampler(
-            #     self.train_cfg.iou_sampler, context=self)
             self.bbox_assigner = TASK_UTILS.build(self.train_cfg.bbox_assigner)
-            # TODO investigate context=self
-            self.bbox_sampler = TASK_UTILS.build(self.train_cfg.bbox_sampler)
-            self.iou_assigner = TASK_UTILS.build(self.train_cfg.iou_assigner)
-            self.iou_sampler = TASK_UTILS.build(self.train_cfg.iou_sampler)
+            self.bbox_sampler = TASK_UTILS.build(
+                self.train_cfg.bbox_sampler, default_args=dict(context=self))
 
-    # def forward_train(self,
-    #                   x,
-    #                   img_metas,
-    #                   proposal_list,
-    #                   gt_bboxes,
-    #                   gt_labels,
-    #                   gt_bboxes_ignore=None,
-    #                   gt_masks=None):
+            # self.bbox_assigner = TASK_UTILS.build(self.train_cfg.bbox_assigner)
+            # self.bbox_sampler = TASK_UTILS.build(self.train_cfg.bbox_sampler)
+            self.iou_assigner = TASK_UTILS.build(self.train_cfg.iou_assigner)
+            self.iou_sampler = TASK_UTILS.build(
+                self.train_cfg.iou_sampler, default_args=dict(context=self))
+
+
     def loss(self, x: Tuple[Tensor], rpn_results_list: InstanceList,
               batch_data_samples: List[DetDataSample]) -> dict:
         """Perform forward propagation and loss calculation of the detection
@@ -91,39 +84,10 @@ class IoURoIHead(StandardRoIHead):
                 - `mask_targets` (Tensor): Mask target of each positive\
                     proposals in the image.
                 - `loss_mask` (dict): A dictionary of mask loss components.
-        """
-        
-        ################ the RCNN part #################
-        pdb.set_trace()
-        assert len(rpn_results_list) == len(batch_data_samples)
-        outputs = unpack_gt_instances(batch_data_samples)
-        batch_gt_instances, batch_gt_instances_ignore, batch_img_metas = outputs
-        
-        # assign gts and sample proposals
-        num_imgs = len(batch_data_samples)
-        sampling_results = []
-        for i in range(num_imgs):          
-            # This section is copied from StandardIoUHead
-            # rename rpn_results.bboxes to rpn_results.priors
-            rpn_results = rpn_results_list[i]
-            rpn_results.priors = rpn_results.pop('bboxes')
-
-            assign_result = self.bbox_assigner.assign(
-                rpn_results, batch_gt_instances[i],
-                batch_gt_instances_ignore[i])
-            sampling_result = self.bbox_sampler.sample(
-                assign_result,
-                rpn_results,
-                batch_gt_instances[i],
-                feats=[lvl_feat[i][None] for lvl_feat in x])
-            sampling_results.append(sampling_result)
-
-        losses = dict()
-        # This section is copied from StandardRoIHead
-        # bbox head loss
-        if self.with_bbox:
-            bbox_results = self.bbox_loss(x, sampling_results)
-            losses.update(bbox_results['loss_bbox'])
+        """        
+        ################ the RCNN part #################    
+        losses = super().loss(x, rpn_results_list,
+                  batch_data_samples)
         
 
         ################ the IoU part #################
@@ -134,6 +98,12 @@ class IoURoIHead(StandardRoIHead):
         # 2, assign rois to gt_bboxes, use default MaxIoUAssigner
         # 3, do sampling, here we use PseudoSampler, since RoIGenerator has sampling inside.
         # TODO: it may be more reasonable to let sampler do the sampling
+
+        assert len(rpn_results_list) == len(batch_data_samples)
+        outputs = unpack_gt_instances(batch_data_samples)
+        batch_gt_instances, batch_gt_instances_ignore, batch_img_metas = outputs
+        num_imgs = len(batch_data_samples)
+
         iou_rois_list = []
         iou_sampling_results = []
         # # for i in range(len(img_metas)):
@@ -169,33 +139,35 @@ class IoURoIHead(StandardRoIHead):
         gt_bboxes = [x.bboxes for x in batch_gt_instances]
         gt_labels = [x.labels for x in batch_gt_instances]
         img_metas = [x for x in batch_img_metas]
-                        
+        
         iou_losses = self._iou_loss(
             x, iou_sampling_results, gt_bboxes, gt_labels, img_metas)
         
         losses.update(iou_losses)
+        
+    
+        print('count= {}'.format(self.count))
+        self.count+=1 
+        print('IoURoIHead losses\n {}'.format(losses))
+        time.sleep(1.0)
+        
         return losses
 
     def _iou_forward(self, x, rois):
         assert rois.size(1) == 5, 'dim of rois should be [K, 5]'
         iou_feats = self.bbox_roi_extractor(x[:self.bbox_roi_extractor.num_inputs], rois)
         return self.iou_head(iou_feats)
-    
-    # def _iou_forward_train(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
-    #     """Forward IoU head and calculate loss"""
-    #     rois = bbox2roi([res.pos_bboxes for res in sampling_results])
-    #     iou_score = self._iou_forward(x, rois)
-    #     loss_iou = self.iou_head.loss(
-    #         iou_score, sampling_results, gt_bboxes, gt_labels, rois, img_metas)
-    #     return dict(loss_iou=loss_iou)
-    
+        
     def _iou_loss(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
-        """Forward IoU head and calculate loss"""
+        """Perform forward propagation and loss calculation of the iou head on
+        the features of the upstream network.
+        """
         rois = bbox2roi([res.pos_priors for res in sampling_results])
         iou_score = self._iou_forward(x, rois)
         loss_iou = self.iou_head.loss(
             iou_score, sampling_results, gt_bboxes, gt_labels, rois, img_metas)
         return dict(loss_iou=loss_iou)
+        
 
 
     # since it calls roi_extractor, we put refinement in roi_head
@@ -265,55 +237,94 @@ class IoURoIHead(StandardRoIHead):
             det_scores *= det_ious
         return det_bboxes, det_scores, det_labels
 
-    def simple_test_bboxes(self,
-                            x,
-                            img_metas,
-                            proposals,
-                            rcnn_test_cfg,
-                            rescale=False):
+    def predict_bbox(self,
+                     x: Tuple[Tensor],
+                     batch_img_metas: List[dict],
+                     rpn_results_list: InstanceList,
+                     rcnn_test_cfg: ConfigType,
+                     rescale: bool = False) -> InstanceList:
+        """Perform forward propagation of the bbox head and predict detection
+        results on the features of the upstream network.
+
+        Args:
+            x (tuple[Tensor]): Feature maps of all scale level.
+            batch_img_metas (list[dict]): List of image information.
+            rpn_results_list (list[:obj:`InstanceData`]): List of region
+                proposals.
+            rcnn_test_cfg (obj:`ConfigDict`): `test_cfg` of R-CNN.
+            rescale (bool): If True, return boxes in original image space.
+                Defaults to False.
+
+        Returns:
+            list[:obj:`InstanceData`]: Detection results of each image
+            after the post process.
+            Each item usually contains following keys.
+
+                - scores (Tensor): Classification scores, has a shape
+                  (num_instance, )
+                - labels (Tensor): Labels of bboxes, has a shape
+                  (num_instances, ).
+                - bboxes (Tensor): Has a shape (num_instances, 4),
+                  the last dimension 4 arrange as (x1, y1, x2, y2).
+        """
+        pdb.set_trace()
+        print('predict_bbox')
+        proposals = [res.bboxes for res in rpn_results_list]
         rois = bbox2roi(proposals)
+        
+        if rois.shape[0] == 0:
+            return empty_instances(
+                batch_img_metas,
+                rois.device,
+                task_type='bbox',
+                box_type=self.bbox_head.predict_box_type,
+                num_classes=self.bbox_head.num_classes,
+                score_per_cls=rcnn_test_cfg is None)
+        
         bbox_results = self._bbox_forward(x, rois)
-        img_shapes = tuple(meta['img_shape'] for meta in img_metas)
-        scale_factors = tuple(meta['scale_factor'] for meta in img_metas)
+
+        img_shapes = tuple(meta['img_shape'] for meta in batch_img_metas)
+        scale_factors = tuple(meta['scale_factor'] for meta in batch_img_metas)
+
         # split batch bbox prediction back to each image
-        cls_score = bbox_results['cls_score']
-        bbox_pred = bbox_results['bbox_pred']
+        cls_scores = bbox_results['cls_score']
+        bbox_preds = bbox_results['bbox_pred']
         num_proposals_per_img = tuple(len(p) for p in proposals)
         rois = rois.split(num_proposals_per_img, 0)
-        cls_score = cls_score.split(num_proposals_per_img, 0)
+        cls_scores = cls_scores.split(num_proposals_per_img, 0)
+
         # some detector with_reg is False, bbox_pred will be None
-        if bbox_pred is not None:
+        if bbox_preds is not None:
             # TODO move this to a sabl_roi_head
             # the bbox prediction of some detectors like SABL is not Tensor
-            if isinstance(bbox_pred, torch.Tensor):
-                bbox_pred = bbox_pred.split(num_proposals_per_img, 0)
+            if isinstance(bbox_preds, torch.Tensor):
+                bbox_preds = bbox_preds.split(num_proposals_per_img, 0)
             else:
-                bbox_pred = self.bbox_head.bbox_pred_split(
-                    bbox_pred, num_proposals_per_img)
+                bbox_preds = self.bbox_head.bbox_pred_split(
+                    bbox_preds, num_proposals_per_img)
         else:
             bbox_pred = (None, ) * len(proposals)
-        det_bboxes, det_labels = [], []
+
         iou_cfg = rcnn_test_cfg.get('iou', None)
         if iou_cfg is None:
-            for i in range(len(proposals)):
-                det_bbox, det_label = self.bbox_head.get_bboxes(
-                    rois[i],
-                    cls_score[i],
-                    bbox_pred[i],
-                    img_shapes[i],
-                    scale_factors[i],
-                    rescale=rescale,
-                    cfg=rcnn_test_cfg)
-                det_bboxes.append(det_bbox)
-                det_labels.append(det_label)
-            return det_bboxes, det_labels
-
+            result_list = self.bbox_head.predict_by_feat(
+                rois=rois,
+                cls_scores=cls_scores,
+                bbox_preds=bbox_preds,
+                batch_img_metas=batch_img_metas,
+                rcnn_test_cfg=rcnn_test_cfg,
+                rescale=rescale)
+            return result_list
+        
+        # base data instance and results list to return info.
+        results = InstanceData()
+        result_list = []
         # next apply iou_head, it will use some of the configs from rcnn
         for i in range(len(proposals)):
-            cur_cls_score = cls_score[i].softmax(1)[:, :-1] # rm bg scores
+            cur_cls_score = cls_scores[i].softmax(1)[:, :-1] # rm bg scores
             cur_max_score, cur_bbox_label = cur_cls_score.max(1)
             regressed = self.bbox_head.regress_by_class(
-                rois[i], cur_bbox_label, bbox_pred[i], img_metas[i])
+                rois[i], cur_bbox_label, bbox_pred[i], batch_img_metas[i])
             cur_iou_score = self._iou_forward(x, regressed)
 
             if iou_cfg.nms.multiclass:
@@ -341,16 +352,22 @@ class IoURoIHead(StandardRoIHead):
                 det_iou   = det_iou[:iou_cfg.refine.pre_refine]
                 det_label = det_label[:iou_cfg.refine.pre_refine]
                 det_bbox, det_score, det_label = self.refine_by_iou(
-                    x, det_bbox, det_score, det_label, i, img_metas[i],
+                    x, det_bbox, det_score, det_label, i, batch_img_metas[i],
                     iou_cfg.refine)
             if rescale and det_bbox.size(0) > 0:
                 scale_factor = det_bbox.new_tensor(scale_factors[i])
                 det_bbox = (det_bbox.view(det_bbox.size(0), -1, 4)/scale_factor)\
                             .view(det_bbox.size(0), -1)
+
             det_score, srt_idx = det_score.sort(descending=True)
             det_bbox = det_bbox[srt_idx]
             det_label = det_label[srt_idx]
             det_bbox = torch.cat([det_bbox, det_score.view(-1, 1)], dim=1)
-            det_bboxes.append(det_bbox[:rcnn_test_cfg.max_per_img])
-            det_labels.append(det_label[:rcnn_test_cfg.max_per_img])
-        return det_bboxes, det_labels
+
+            # assemble results
+            results.scores = det_score
+            results.labels = det_label
+            results.bboxes = det_bbox
+            result_list.append(results)
+        
+        return result_list

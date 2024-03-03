@@ -37,7 +37,8 @@ model=dict(
             num_classes=80,
             class_agnostic=False,
             target_norm=dict(mean=0.5, std=0.5),
-            loss_iou=dict(type='SmoothL1Loss', loss_weight=5.0))),
+            # loss_iou=dict(type='SmoothL1Loss', loss_weight=5.0))),
+            loss_iou=dict(type='SmoothL1Loss', loss_weight=1.0))),
     train_cfg=dict(
         rcnn=dict(
             _delete_=True,

@@ -18,6 +18,8 @@ from mmdet.registry import MODELS, TASK_UTILS
 from mmdet.structures.bbox import get_box_tensor, scale_boxes
 from mmdet.utils import ConfigType, InstanceList, OptMultiConfig
 
+import time
+
 
 @MODELS.register_module()
 class BBoxHead(BaseModule):
@@ -140,6 +142,8 @@ class BBoxHead(BaseModule):
                   scale levels, each is a 4D-tensor, the channels number
                   is num_base_priors * 4.
         """
+        print('Executing BBoxHead.forward')
+        time.sleep(10.0)
         if self.with_avg_pool:
             if x.numel() > 0:
                 x = self.avg_pool(x)
@@ -369,7 +373,7 @@ class BBoxHead(BaseModule):
         Returns:
             dict: A dictionary of loss.
         """
-
+        # print('Executing BBoxHead.loss')
         losses = dict()
 
         if cls_score is not None:

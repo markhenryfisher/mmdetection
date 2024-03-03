@@ -177,6 +177,7 @@ class ConvFCBBoxHead(BBoxHead):
                     scale levels, each is a 4D-tensor, the channels number \
                     is num_base_priors * 4.
         """
+        # print('Executing ConvFCBBoxHead.forward')
         # shared part
         if self.num_shared_convs > 0:
             for conv in self.shared_convs:

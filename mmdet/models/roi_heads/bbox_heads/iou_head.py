@@ -19,6 +19,9 @@ from mmdet.registry import MODELS
 # from mmdet.utils import ConfigType, MultiConfig, OptConfigType, OptMultiConfig
 # from .bbox_head import BBoxHead
 
+import time
+import pdb
+
 
 @MODELS.register_module()
 class IoUHead(BaseModule):
@@ -54,8 +57,7 @@ class IoUHead(BaseModule):
             'IoU loss only support SmoothL1Loss or CrossEntropyLoss'
         if self.loss_type == 'CrossEntropyLoss':
             assert loss_iou.use_sigmoid, 'only support BCE for loss_iou'
-        # mhf 
-        # self.loss_iou = build_loss(loss_iou)
+        # mhf - Unsure why but based on bbox_head this is how
         self.loss_iou = MODELS.build(loss_iou)
         self.shared_fcs = nn.ModuleList()
         for cur_fc_channels in fc_channels:
@@ -70,6 +72,10 @@ class IoUHead(BaseModule):
                 dict(type='Xavier', layer='Linear', override=dict(name='shared_fcs'))]
 
     def forward(self, x):
+        """Forward features from the upstream network.
+        """
+
+        print('Exectuting IoUHead.forward')
         x = x.flatten(1)
         for fc in self.shared_fcs:
             x = self.relu(fc(x))
@@ -85,6 +91,7 @@ class IoUHead(BaseModule):
 
     # TODO: mhf may need to replace with autocast 
     # @force_fp32(apply_to=('iou_score'))
+    # @torch.autocast(device_type="cuda", dtype=torch.float32)
     def loss(self,
              iou_score,
              sampling_results,

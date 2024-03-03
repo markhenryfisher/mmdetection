@@ -35,6 +35,9 @@ class BaseRoIHead(BaseModule, metaclass=ABCMeta):
             self.init_mask_head(mask_roi_extractor, mask_head)
 
         self.init_assigner_sampler()
+        
+        self.count=0
+
 
     @property
     def with_bbox(self) -> bool:
