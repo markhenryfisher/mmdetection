@@ -19,6 +19,7 @@ from mmdet.structures.bbox import get_box_tensor, scale_boxes
 from mmdet.utils import ConfigType, InstanceList, OptMultiConfig
 
 import time
+import pdb
 
 
 @MODELS.register_module()
@@ -699,6 +700,7 @@ class BBoxHead(BaseModule):
         Returns:
             Tensor: Regressed bboxes, the same shape as input rois.
         """
+        pdb.set_trace()
         reg_dim = self.bbox_coder.encode_size
         if not self.reg_class_agnostic:
             label = label * reg_dim

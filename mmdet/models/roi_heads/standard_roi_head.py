@@ -12,7 +12,7 @@ from ..task_modules.samplers import SamplingResult
 from ..utils import empty_instances, unpack_gt_instances
 from .base_roi_head import BaseRoIHead
 
-import time
+# import time
 import pdb
 
 
@@ -22,8 +22,6 @@ class StandardRoIHead(BaseRoIHead):
 
     def init_assigner_sampler(self) -> None:
         """Initialize assigner and sampler."""
-        print('Executing StandardRoIHead.init_assigner_sampler')
-        time.sleep(10.0)
         self.bbox_assigner = None
         self.bbox_sampler = None
         if self.train_cfg:
@@ -81,6 +79,7 @@ class StandardRoIHead(BaseRoIHead):
             tuple: A tuple of features from ``bbox_head`` and ``mask_head``
             forward.
         """
+        pdb.set_trace()
         print('Executing StandardIoUHead.forward')
         results = ()
         proposals = [rpn_results.bboxes for rpn_results in rpn_results_list]
@@ -171,7 +170,8 @@ class StandardRoIHead(BaseRoIHead):
                 - `bbox_pred` (Tensor): Box energies / deltas.
                 - `bbox_feats` (Tensor): Extract bbox RoI features.
         """
-        # print('Executing StandardRoIHead._bbox_forward')
+        pdb.set_trace()
+        print('Executing StandardRoIHead._bbox_forward')
         # TODO: a more flexible way to decide which feature maps to use
         bbox_feats = self.bbox_roi_extractor(
             x[:self.bbox_roi_extractor.num_inputs], rois)

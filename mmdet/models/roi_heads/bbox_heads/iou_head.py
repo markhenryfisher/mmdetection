@@ -19,8 +19,8 @@ from mmdet.registry import MODELS
 # from mmdet.utils import ConfigType, MultiConfig, OptConfigType, OptMultiConfig
 # from .bbox_head import BBoxHead
 
-import time
-import pdb
+# import time
+# import pdb
 
 
 @MODELS.register_module()
@@ -74,8 +74,6 @@ class IoUHead(BaseModule):
     def forward(self, x):
         """Forward features from the upstream network.
         """
-
-        print('Exectuting IoUHead.forward')
         x = x.flatten(1)
         for fc in self.shared_fcs:
             x = self.relu(fc(x))

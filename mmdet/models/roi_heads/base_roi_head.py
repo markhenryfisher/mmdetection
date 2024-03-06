@@ -9,6 +9,8 @@ from mmdet.registry import MODELS
 from mmdet.structures import SampleList
 from mmdet.utils import InstanceList, OptConfigType, OptMultiConfig
 
+import pdb
+
 
 class BaseRoIHead(BaseModule, metaclass=ABCMeta):
     """Base class for RoIHeads."""
@@ -36,8 +38,6 @@ class BaseRoIHead(BaseModule, metaclass=ABCMeta):
 
         self.init_assigner_sampler()
         
-        self.count=0
-
 
     @property
     def with_bbox(self) -> bool:
@@ -106,6 +106,7 @@ class BaseRoIHead(BaseModule, metaclass=ABCMeta):
                   the last dimension 4 arrange as (x1, y1, x2, y2).
                 - masks (Tensor): Has a shape (num_instances, H, W).
         """
+        pdb.set_trace()
         assert self.with_bbox, 'Bbox head must be implemented.'
         batch_img_metas = [
             data_samples.metainfo for data_samples in batch_data_samples

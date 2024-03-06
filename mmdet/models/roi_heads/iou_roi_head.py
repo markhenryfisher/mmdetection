@@ -6,7 +6,7 @@ from torch import Tensor
 
 from mmdet.registry import MODELS, TASK_UTILS
 from mmdet.structures import DetDataSample, SampleList
-from mmdet.structures.bbox import bbox2roi
+from mmdet.structures.bbox import bbox2roi, scale_boxes
 from mmdet.utils import ConfigType, InstanceList
 from ..utils import empty_instances, unpack_gt_instances
 from mmdet.models.layers import batched_iou_nms
@@ -17,7 +17,7 @@ from mmengine.structures import InstanceData
 import torch
 
 import pdb
-import time
+# import time
 
 
 @MODELS.register_module()
@@ -29,17 +29,15 @@ class IoURoIHead(StandardRoIHead):
     """
     def __init__(self, *args, iou_head=None, roi_generator=None, **kwargs):
         super(IoURoIHead, self).__init__(*args, **kwargs)
-    #     assert iou_head is not None, 'IoU head must be present for StandardIoUHead'
-    #     assert not self.with_shared_head, 'shared head is not supported for now'
-    #     assert not self.with_mask, 'mask is not supported for now'
+        assert iou_head is not None, 'IoU head must be present for StandardIoUHead'
+        assert not self.with_shared_head, 'shared head is not supported for now'
+        assert not self.with_mask, 'mask is not supported for now'
         self.iou_head = MODELS.build(iou_head)
         self.roi_generator = roi_generator
         if roi_generator is not None:
             self.roi_generator = RoIGenerator(**roi_generator)
 
     def init_assigner_sampler(self):
-        print('Executing IoURoIHead.init_assigner_sampler')
-        time.sleep(10.0)
         self.bbox_assigner = None
         self.bbox_sampler = None
         self.iou_assigner = None
@@ -48,9 +46,6 @@ class IoURoIHead(StandardRoIHead):
             self.bbox_assigner = TASK_UTILS.build(self.train_cfg.bbox_assigner)
             self.bbox_sampler = TASK_UTILS.build(
                 self.train_cfg.bbox_sampler, default_args=dict(context=self))
-
-            # self.bbox_assigner = TASK_UTILS.build(self.train_cfg.bbox_assigner)
-            # self.bbox_sampler = TASK_UTILS.build(self.train_cfg.bbox_sampler)
             self.iou_assigner = TASK_UTILS.build(self.train_cfg.iou_assigner)
             self.iou_sampler = TASK_UTILS.build(
                 self.train_cfg.iou_sampler, default_args=dict(context=self))
@@ -132,9 +127,6 @@ class IoURoIHead(StandardRoIHead):
         
             iou_sampling_results.append(iou_sampling_result)
             
-        # iou_losses = self._iou_forward_train(
-        #     x, iou_sampling_results, gt_bboxes, gt_labels, img_metas)
-
         # mhf - largely guesswork            
         gt_bboxes = [x.bboxes for x in batch_gt_instances]
         gt_labels = [x.labels for x in batch_gt_instances]
@@ -144,12 +136,6 @@ class IoURoIHead(StandardRoIHead):
             x, iou_sampling_results, gt_bboxes, gt_labels, img_metas)
         
         losses.update(iou_losses)
-        
-    
-        print('count= {}'.format(self.count))
-        self.count+=1 
-        print('IoURoIHead losses\n {}'.format(losses))
-        time.sleep(1.0)
         
         return losses
 
@@ -191,7 +177,8 @@ class IoURoIHead(StandardRoIHead):
             for i in range(cfg.t):
                 if prev_score.size(0) <= 0:
                     break
-                #prev_iou.sum().backward()
+                # TODO! mhf check if this needs to be commented out?
+                # prev_iou.sum().backward()
                 prev_bbox_grad = torch.autograd.grad(
                     prev_iou.sum(), prev_bbox, only_inputs=True)[0]
                 if keep_mask is not None:
@@ -267,8 +254,6 @@ class IoURoIHead(StandardRoIHead):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
-        pdb.set_trace()
-        print('predict_bbox')
         proposals = [res.bboxes for res in rpn_results_list]
         rois = bbox2roi(proposals)
         
@@ -303,7 +288,7 @@ class IoURoIHead(StandardRoIHead):
                 bbox_preds = self.bbox_head.bbox_pred_split(
                     bbox_preds, num_proposals_per_img)
         else:
-            bbox_pred = (None, ) * len(proposals)
+            bbox_preds = (None, ) * len(proposals)
 
         iou_cfg = rcnn_test_cfg.get('iou', None)
         if iou_cfg is None:
@@ -323,9 +308,17 @@ class IoURoIHead(StandardRoIHead):
         for i in range(len(proposals)):
             cur_cls_score = cls_scores[i].softmax(1)[:, :-1] # rm bg scores
             cur_max_score, cur_bbox_label = cur_cls_score.max(1)
-            regressed = self.bbox_head.regress_by_class(
-                rois[i], cur_bbox_label, bbox_pred[i], batch_img_metas[i])
+
+            # TODO! mhf work out what regress_by_class is doing
+            # regressed = self.bbox_head.regress_by_class(
+            #     rois[i], cur_bbox_label, bbox_preds[i], batch_img_metas[i])
+            
+            # mhf try missing out regress_by_class
+            pdb.set_trace()
+            regressed = rois[i]
             cur_iou_score = self._iou_forward(x, regressed)
+
+            
 
             if iou_cfg.nms.multiclass:
                 nms_cls_score = cur_cls_score.reshape(-1)
@@ -346,6 +339,8 @@ class IoURoIHead(StandardRoIHead):
                 nms_regressed, nms_cls_score, nms_iou_score, nms_label,
                 iou_cfg.nms.iou_threshold, rcnn_test_cfg.score_thr,
                 guide=iou_cfg.nms.get('guide', 'rank'))
+            
+            # TODO! mhf skip this part ?
             if iou_cfg.get('refine', None) is not None and det_bbox.size(0) > 0:
                 det_bbox  = det_bbox[:iou_cfg.refine.pre_refine]
                 det_score = det_score[:iou_cfg.refine.pre_refine]
@@ -354,10 +349,19 @@ class IoURoIHead(StandardRoIHead):
                 det_bbox, det_score, det_label = self.refine_by_iou(
                     x, det_bbox, det_score, det_label, i, batch_img_metas[i],
                     iou_cfg.refine)
+            pdb.set_trace()
+            # mhf substitute box_head rescale code
+            # if rescale and det_bbox.size(0) > 0:
+            #     scale_factor = det_bbox.new_tensor(scale_factors[i])
+            #     det_bbox = (det_bbox.view(det_bbox.size(0), -1, 4)/scale_factor)\
+            #                 .view(det_bbox.size(0), -1)
+                            
             if rescale and det_bbox.size(0) > 0:
-                scale_factor = det_bbox.new_tensor(scale_factors[i])
-                det_bbox = (det_bbox.view(det_bbox.size(0), -1, 4)/scale_factor)\
-                            .view(det_bbox.size(0), -1)
+                img_meta = [meta for meta in batch_img_metas]                
+                assert img_meta.get('scale_factor') is not None
+                scale_factor = [1 / s for s in img_meta['scale_factor']]
+                det_bbox = scale_boxes(det_bbox, scale_factor)
+
 
             det_score, srt_idx = det_score.sort(descending=True)
             det_bbox = det_bbox[srt_idx]
