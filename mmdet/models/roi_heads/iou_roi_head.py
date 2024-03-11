@@ -5,7 +5,7 @@ from typing import List, Tuple
 from torch import Tensor
 
 from mmdet.registry import MODELS, TASK_UTILS
-from mmdet.structures import DetDataSample, SampleList
+from mmdet.structures import DetDataSample
 from mmdet.structures.bbox import bbox2roi, scale_boxes
 from mmdet.utils import ConfigType, InstanceList
 from ..utils import empty_instances, unpack_gt_instances
@@ -17,7 +17,7 @@ from mmengine.structures import InstanceData
 import torch
 
 import pdb
-# import time
+
 
 
 @MODELS.register_module()
@@ -80,7 +80,7 @@ class IoURoIHead(StandardRoIHead):
                     proposals in the image.
                 - `loss_mask` (dict): A dictionary of mask loss components.
         """        
-        ################ the RCNN part #################    
+        ################ the RCNN part #################  
         losses = super().loss(x, rpn_results_list,
                   batch_data_samples)
         
@@ -93,7 +93,7 @@ class IoURoIHead(StandardRoIHead):
         # 2, assign rois to gt_bboxes, use default MaxIoUAssigner
         # 3, do sampling, here we use PseudoSampler, since RoIGenerator has sampling inside.
         # TODO: it may be more reasonable to let sampler do the sampling
-
+        pdb.set_trace()
         assert len(rpn_results_list) == len(batch_data_samples)
         outputs = unpack_gt_instances(batch_data_samples)
         batch_gt_instances, batch_gt_instances_ignore, batch_img_metas = outputs
@@ -140,6 +140,7 @@ class IoURoIHead(StandardRoIHead):
         return losses
 
     def _iou_forward(self, x, rois):
+        # print('Executing _iou_forward')
         assert rois.size(1) == 5, 'dim of rois should be [K, 5]'
         iou_feats = self.bbox_roi_extractor(x[:self.bbox_roi_extractor.num_inputs], rois)
         return self.iou_head(iou_feats)
@@ -255,6 +256,8 @@ class IoURoIHead(StandardRoIHead):
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
         proposals = [res.bboxes for res in rpn_results_list]
+        for i in range(len(proposals)):
+            assert proposals[i].size(1) == 4, 'dim of proposals should be [K, 4]'
         rois = bbox2roi(proposals)
         
         if rois.shape[0] == 0:
@@ -268,8 +271,6 @@ class IoURoIHead(StandardRoIHead):
         
         bbox_results = self._bbox_forward(x, rois)
 
-        img_shapes = tuple(meta['img_shape'] for meta in batch_img_metas)
-        scale_factors = tuple(meta['scale_factor'] for meta in batch_img_metas)
 
         # split batch bbox prediction back to each image
         cls_scores = bbox_results['cls_score']
@@ -309,16 +310,13 @@ class IoURoIHead(StandardRoIHead):
             cur_cls_score = cls_scores[i].softmax(1)[:, :-1] # rm bg scores
             cur_max_score, cur_bbox_label = cur_cls_score.max(1)
 
-            # TODO! mhf work out what regress_by_class is doing
-            # regressed = self.bbox_head.regress_by_class(
-            #     rois[i], cur_bbox_label, bbox_preds[i], batch_img_metas[i])
+            # TODO! mhf refactor legacy code
+            regressed = self.bbox_head.legacy_regress_by_class(
+                rois[i], cur_bbox_label, bbox_preds[i], batch_img_metas[i])
             
             # mhf try missing out regress_by_class
-            pdb.set_trace()
-            regressed = rois[i]
+            # regressed = rois[i]
             cur_iou_score = self._iou_forward(x, regressed)
-
-            
 
             if iou_cfg.nms.multiclass:
                 nms_cls_score = cur_cls_score.reshape(-1)
@@ -334,13 +332,14 @@ class IoURoIHead(StandardRoIHead):
                     torch.arange(cur_iou_score.size(0)), cur_bbox_label]
                 nms_regressed = regressed[:, 1:]
                 nms_label = cur_bbox_label
+                
             # apply iou_nms
             det_bbox, det_score, det_iou, det_label = batched_iou_nms(
                 nms_regressed, nms_cls_score, nms_iou_score, nms_label,
                 iou_cfg.nms.iou_threshold, rcnn_test_cfg.score_thr,
                 guide=iou_cfg.nms.get('guide', 'rank'))
             
-            # TODO! mhf skip this part ?
+            # TODO! mhf currently iou_config doesn't include refine (08.03.24)
             if iou_cfg.get('refine', None) is not None and det_bbox.size(0) > 0:
                 det_bbox  = det_bbox[:iou_cfg.refine.pre_refine]
                 det_score = det_score[:iou_cfg.refine.pre_refine]
@@ -349,15 +348,9 @@ class IoURoIHead(StandardRoIHead):
                 det_bbox, det_score, det_label = self.refine_by_iou(
                     x, det_bbox, det_score, det_label, i, batch_img_metas[i],
                     iou_cfg.refine)
-            pdb.set_trace()
-            # mhf substitute box_head rescale code
-            # if rescale and det_bbox.size(0) > 0:
-            #     scale_factor = det_bbox.new_tensor(scale_factors[i])
-            #     det_bbox = (det_bbox.view(det_bbox.size(0), -1, 4)/scale_factor)\
-            #                 .view(det_bbox.size(0), -1)
-                            
+                                        
             if rescale and det_bbox.size(0) > 0:
-                img_meta = [meta for meta in batch_img_metas]                
+                img_meta = batch_img_metas[i]
                 assert img_meta.get('scale_factor') is not None
                 scale_factor = [1 / s for s in img_meta['scale_factor']]
                 det_bbox = scale_boxes(det_bbox, scale_factor)
@@ -366,7 +359,8 @@ class IoURoIHead(StandardRoIHead):
             det_score, srt_idx = det_score.sort(descending=True)
             det_bbox = det_bbox[srt_idx]
             det_label = det_label[srt_idx]
-            det_bbox = torch.cat([det_bbox, det_score.view(-1, 1)], dim=1)
+            # mhf why append score?
+            # det_bbox = torch.cat([det_bbox, det_score.view(-1, 1)], dim=1)
 
             # assemble results
             results.scores = det_score

@@ -8,17 +8,17 @@ model=dict(
     roi_head=dict(
         type='IoURoIHead',
         # substitute 'PrRoIExtractor' 
-        # bbox_roi_extractor=dict(
-            # _delete_=True,
-            # type='PrRoIExtractor',
-            # roi_layer=dict(type='PrRoIPool2D', pooled_height=7, pooled_width=7),
-            # out_channels=256,
-            # featmap_strides=[4, 8, 16, 32]),
         bbox_roi_extractor=dict(
-            type='SingleRoIExtractor',
-            roi_layer=dict(type='RoIAlign', output_size=7, sampling_ratio=0),
+            _delete_=True,
+            type='PrRoIExtractor',
+            roi_layer=dict(type='PrRoIPool2D', pooled_height=7, pooled_width=7),
             out_channels=256,
             featmap_strides=[4, 8, 16, 32]),
+        # bbox_roi_extractor=dict(
+            # type='SingleRoIExtractor',
+            # roi_layer=dict(type='RoIAlign', output_size=7, sampling_ratio=0),
+            # out_channels=256,
+            # featmap_strides=[4, 8, 16, 32]),
         roi_generator=dict(
             pre_sample=4000,
             xy_steps=16,
@@ -80,5 +80,6 @@ model=dict(
                 ))))
 
 # For better, more stable performance initialize from COCO                    
-load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
-
+# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+load_from = None
+resume = True

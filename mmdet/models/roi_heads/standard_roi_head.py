@@ -12,8 +12,8 @@ from ..task_modules.samplers import SamplingResult
 from ..utils import empty_instances, unpack_gt_instances
 from .base_roi_head import BaseRoIHead
 
-# import time
 import pdb
+
 
 
 @MODELS.register_module()
@@ -79,8 +79,7 @@ class StandardRoIHead(BaseRoIHead):
             tuple: A tuple of features from ``bbox_head`` and ``mask_head``
             forward.
         """
-        pdb.set_trace()
-        print('Executing StandardIoUHead.forward')
+        # print('Executing StandardIoUHead.forward')
         results = ()
         proposals = [rpn_results.bboxes for rpn_results in rpn_results_list]
         rois = bbox2roi(proposals)
@@ -112,6 +111,7 @@ class StandardRoIHead(BaseRoIHead):
         Returns:
             dict[str, Tensor]: A dictionary of loss components
         """
+        pdb.set_trace()
         # print('Executing StandardRoIHead.loss')
         assert len(rpn_results_list) == len(batch_data_samples)
         outputs = unpack_gt_instances(batch_data_samples)
@@ -148,11 +148,6 @@ class StandardRoIHead(BaseRoIHead):
                                           batch_gt_instances)
             losses.update(mask_results['loss_mask'])
 
-        # print('count= {}'.format(self.count))
-        # self.count+=1 
-        # print('StandardRoIHead losses\n {}'.format(losses))
-        # time.sleep(1.0)
-
         return losses
 
     def _bbox_forward(self, x: Tuple[Tensor], rois: Tensor) -> dict:
@@ -170,8 +165,7 @@ class StandardRoIHead(BaseRoIHead):
                 - `bbox_pred` (Tensor): Box energies / deltas.
                 - `bbox_feats` (Tensor): Extract bbox RoI features.
         """
-        pdb.set_trace()
-        print('Executing StandardRoIHead._bbox_forward')
+        # print('Executing StandardRoIHead._bbox_forward')
         # TODO: a more flexible way to decide which feature maps to use
         bbox_feats = self.bbox_roi_extractor(
             x[:self.bbox_roi_extractor.num_inputs], rois)

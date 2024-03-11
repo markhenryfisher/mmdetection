@@ -73,6 +73,9 @@ def main():
     if args.checkpoint is None:
         args.checkpoint = "work_dirs/faster-rcnn_iou_r50_fpn_1x_coco/epoch_1.pth"
 
+    args.show = True
+    args.show_dir = 'temp'
+
     # Reduce the number of repeated compilations and improve
     # testing speed.
     setup_cache_size_limit_of_dynamo()
