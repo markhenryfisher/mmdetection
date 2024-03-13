@@ -19,4 +19,3 @@ int prroi_pooling_coor_backward_cuda(
     THCudaTensor *features, THCudaTensor *rois, THCudaTensor *output, THCudaTensor *output_diff, THCudaTensor *features_diff,
     int pooled_height, int pooled_width, float spatial_scal
 );
-

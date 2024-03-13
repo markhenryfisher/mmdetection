@@ -19,7 +19,6 @@ from mmdet.registry import MODELS
 # from mmdet.utils import ConfigType, MultiConfig, OptConfigType, OptMultiConfig
 # from .bbox_head import BBoxHead
 
-import pdb
 
 
 
@@ -74,7 +73,6 @@ class IoUHead(BaseModule):
     def forward(self, x):
         """Forward features from the upstream network.
         """
-        pdb.set_trace()
         x = x.flatten(1)
         for fc in self.shared_fcs:
             x = self.relu(fc(x))
@@ -98,7 +96,6 @@ class IoUHead(BaseModule):
              gt_labels,
              rois,
              img_metas):
-        pdb.set_trace()
         target_bboxes = torch.cat(
             [gt_bboxes[i][res.pos_assigned_gt_inds] \
              for i, res in enumerate(sampling_results)])

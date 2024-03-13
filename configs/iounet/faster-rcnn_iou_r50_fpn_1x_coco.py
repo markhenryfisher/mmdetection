@@ -14,11 +14,6 @@ model=dict(
             roi_layer=dict(type='PrRoIPool2D', pooled_height=7, pooled_width=7),
             out_channels=256,
             featmap_strides=[4, 8, 16, 32]),
-        # bbox_roi_extractor=dict(
-            # type='SingleRoIExtractor',
-            # roi_layer=dict(type='RoIAlign', output_size=7, sampling_ratio=0),
-            # out_channels=256,
-            # featmap_strides=[4, 8, 16, 32]),
         roi_generator=dict(
             pre_sample=4000,
             xy_steps=16,

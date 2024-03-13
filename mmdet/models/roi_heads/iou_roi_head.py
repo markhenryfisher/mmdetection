@@ -16,8 +16,6 @@ from mmdet.models.utils.iounet_utils import RoIGenerator
 from mmengine.structures import InstanceData
 import torch
 
-import pdb
-
 
 
 @MODELS.register_module()
@@ -93,7 +91,6 @@ class IoURoIHead(StandardRoIHead):
         # 2, assign rois to gt_bboxes, use default MaxIoUAssigner
         # 3, do sampling, here we use PseudoSampler, since RoIGenerator has sampling inside.
         # TODO: it may be more reasonable to let sampler do the sampling
-        pdb.set_trace()
         assert len(rpn_results_list) == len(batch_data_samples)
         outputs = unpack_gt_instances(batch_data_samples)
         batch_gt_instances, batch_gt_instances_ignore, batch_img_metas = outputs
@@ -140,7 +137,6 @@ class IoURoIHead(StandardRoIHead):
         return losses
 
     def _iou_forward(self, x, rois):
-        # print('Executing _iou_forward')
         assert rois.size(1) == 5, 'dim of rois should be [K, 5]'
         iou_feats = self.bbox_roi_extractor(x[:self.bbox_roi_extractor.num_inputs], rois)
         return self.iou_head(iou_feats)

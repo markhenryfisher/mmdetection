@@ -29,7 +29,7 @@ def _import_prroi_pooling():
 
             _prroi_pooling = load_extension(
                 '_prroi_pooling',
-                [pjoin(root_dir, 'prroi_pooling_gpu.c'), pjoin(root_dir, 'prroi_pooling_gpu_impl.cu')],
+                [pjoin(root_dir, 'prroi_pooling_gpu.cpp'), pjoin(root_dir, 'prroi_pooling_gpu_impl.cu')],
                 verbose=True
             )
         except ImportError:

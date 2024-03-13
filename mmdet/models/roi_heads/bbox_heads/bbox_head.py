@@ -140,7 +140,6 @@ class BBoxHead(BaseModule):
                   scale levels, each is a 4D-tensor, the channels number
                   is num_base_priors * 4.
         """
-        # print('Executing BBoxHead.forward')
         if self.with_avg_pool:
             if x.numel() > 0:
                 x = self.avg_pool(x)
@@ -370,7 +369,6 @@ class BBoxHead(BaseModule):
         Returns:
             dict: A dictionary of loss.
         """
-        # print('Executing BBoxHead.loss')
         losses = dict()
 
         if cls_score is not None:
