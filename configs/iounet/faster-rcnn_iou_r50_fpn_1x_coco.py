@@ -65,16 +65,14 @@ model=dict(
         rcnn=dict(
             iou=dict(
                 nms=dict(multiclass=True, iou_threshold=0.5),
-                # refine=dict(
-                    # pre_refine=100,
-                    # t=5,
-                    # omega_1=0.001,
-                    # omega_2=-0.01,
-                    # lamb=0.5,
-                    # use_iou_score=True)
+                refine=dict(
+                    pre_refine=100,
+                    t=5,
+                    omega_1=0.001,
+                    omega_2=-0.01,
+                    lamb=0.5,
+                    use_iou_score=True)
                 ))))
 
 # For better, more stable performance initialize from COCO                    
-# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
-load_from = None
-resume = True
+load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa

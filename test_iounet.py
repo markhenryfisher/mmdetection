@@ -71,7 +71,7 @@ def main():
         args.config = "configs/iounet/faster-rcnn_iou_r50_fpn_1x_coco.py"
 
     if args.checkpoint is None:
-        args.checkpoint = "work_dirs/faster-rcnn_iou_r50_fpn_1x_coco/epoch_1.pth"
+        args.checkpoint = "work_dirs/faster-rcnn_iou_r50_fpn_1x_coco/epoch_10.pth"
 
     args.show = True
     args.show_dir = 'temp'

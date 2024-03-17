@@ -16,6 +16,7 @@ from mmdet.models.utils.iounet_utils import RoIGenerator
 from mmengine.structures import InstanceData
 import torch
 
+import pdb
 
 
 @MODELS.register_module()
@@ -287,6 +288,7 @@ class IoURoIHead(StandardRoIHead):
         else:
             bbox_preds = (None, ) * len(proposals)
 
+        pdb.set_trace()
         iou_cfg = rcnn_test_cfg.get('iou', None)
         if iou_cfg is None:
             result_list = self.bbox_head.predict_by_feat(
@@ -310,8 +312,6 @@ class IoURoIHead(StandardRoIHead):
             regressed = self.bbox_head.legacy_regress_by_class(
                 rois[i], cur_bbox_label, bbox_preds[i], batch_img_metas[i])
             
-            # mhf try missing out regress_by_class
-            # regressed = rois[i]
             cur_iou_score = self._iou_forward(x, regressed)
 
             if iou_cfg.nms.multiclass:
@@ -335,7 +335,6 @@ class IoURoIHead(StandardRoIHead):
                 iou_cfg.nms.iou_threshold, rcnn_test_cfg.score_thr,
                 guide=iou_cfg.nms.get('guide', 'rank'))
             
-            # TODO! mhf currently iou_config doesn't include refine (08.03.24)
             if iou_cfg.get('refine', None) is not None and det_bbox.size(0) > 0:
                 det_bbox  = det_bbox[:iou_cfg.refine.pre_refine]
                 det_score = det_score[:iou_cfg.refine.pre_refine]

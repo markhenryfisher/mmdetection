@@ -1,6 +1,7 @@
 from mmdet.structures.bbox import bbox_overlaps
 from mmcv.ops import nms as nms_mmcv
 import torch
+import pdb
 
 def iou_nms(bboxes, scores, locs, iou_threshold):
     """
@@ -37,6 +38,7 @@ def batched_iou_nms(bboxes, scores, locs, labels, iou_threshold, score_thr=None,
         score_thr (float): filter scores belowing this number
         guide (str): decide how to use iou score to guide nms, 
             supported key words: none, rank, weight"""
+    pdb.set_trace()
     if score_thr is not None:
         filt_mask = scores >= score_thr
         if filt_mask.sum().item() == 0:
