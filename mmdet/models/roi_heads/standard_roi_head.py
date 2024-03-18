@@ -12,8 +12,6 @@ from ..task_modules.samplers import SamplingResult
 from ..utils import empty_instances, unpack_gt_instances
 from .base_roi_head import BaseRoIHead
 
-import pdb
-
 
 
 @MODELS.register_module()
@@ -355,8 +353,6 @@ class StandardRoIHead(BaseRoIHead):
                     bbox_preds, num_proposals_per_img)
         else:
             bbox_preds = (None, ) * len(proposals)
-            
-        pdb.set_trace()
 
         result_list = self.bbox_head.predict_by_feat(
             rois=rois,

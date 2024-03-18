@@ -16,7 +16,7 @@ from mmdet.models.utils.iounet_utils import RoIGenerator
 from mmengine.structures import InstanceData
 import torch
 
-import pdb
+# import pdb
 
 
 @MODELS.register_module()
@@ -288,7 +288,6 @@ class IoURoIHead(StandardRoIHead):
         else:
             bbox_preds = (None, ) * len(proposals)
 
-        pdb.set_trace()
         iou_cfg = rcnn_test_cfg.get('iou', None)
         if iou_cfg is None:
             result_list = self.bbox_head.predict_by_feat(

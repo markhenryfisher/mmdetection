@@ -8,8 +8,6 @@ from torch import Tensor
 from mmdet.structures.bbox import bbox_overlaps
 from mmdet.utils import ConfigType
 
-import pdb
-
 
 def multiclass_nms(
     multi_bboxes: Tensor,
@@ -44,7 +42,6 @@ def multiclass_nms(
             (dets, labels, indices (optional)), tensors of shape (k, 5),
             (k), and (k). Dets are boxes with scores. Labels are 0-based.
     """
-    pdb.set_trace()
     num_classes = multi_scores.size(1) - 1
     # exclude background category
     if multi_bboxes.shape[1] > box_dim:
@@ -144,7 +141,6 @@ def fast_nms(
             and (k, coeffs_dim). Dets are boxes with scores.
             Labels are 0-based.
     """
-    pdb.set_trace()
     scores = multi_scores[:, :-1].t()  # [#class, n]
     scores, idx = scores.sort(1, descending=True)
 
