@@ -16,8 +16,6 @@ from mmdet.models.utils.iounet_utils import RoIGenerator
 from mmengine.structures import InstanceData
 import torch
 
-# import pdb
-
 
 @MODELS.register_module()
 class IoURoIHead(StandardRoIHead):

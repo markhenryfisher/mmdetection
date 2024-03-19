@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+import subprocess
 import argparse
 import os
 import os.path as osp
@@ -66,6 +67,15 @@ def parse_args():
 
 
 def main():
+    # set Visual Studio x64 native tools environment
+    # filepath="D:/path/to/batch/myBatch.bat"
+    filepath = "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvars64.bat"
+    p = subprocess.Popen(filepath, shell=True, stdout = subprocess.PIPE)
+
+    stdout, stderr = p.communicate()
+    print(p.returncode) # is 0 if success
+    
+    
     args = parse_args()
     if args.config is None:
         args.config = "configs/iounet/faster-rcnn_iou_r50_fpn_1x_coco.py"

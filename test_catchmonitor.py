@@ -67,9 +67,9 @@ def main():
     args = parse_args()
     
     if args.config is None:
-        args.config = "configs/catchmonitor/mask-rcnn_r50-caffe_fpn_ms-poly-1x_catchmonitor_mrvscotia.py"
+        args.config = "configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_iou-net.py"
     if args.checkpoint is None:
-        args.checkpoint = "work_dirs/mask-rcnn_r50-caffe_fpn_ms-poly-1x_catchmonitor_mrvscotia/epoch_12.pth"
+        args.checkpoint = "work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_iou-net/epoch_1.pth"
 
     # Reduce the number of repeated compilations and improve
     # testing speed.
