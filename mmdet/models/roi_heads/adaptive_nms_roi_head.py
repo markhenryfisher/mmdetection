@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""iou_roi_head.py: RoI head with a bbox_head and a iou_head."""
+"""
+adaptive_nms_roi_head.py: RoI head with a bbox_head and an adaptive_nms_head.
+See: Liu et al. 'Adaptive NMS: Refining Pedestrian Detection in a Crowd'
+
+"""
 
 from typing import List, Tuple
 from torch import Tensor
@@ -12,28 +16,25 @@ from ..utils import empty_instances, unpack_gt_instances
 from mmdet.models.layers import batched_iou_nms
 
 from .standard_roi_head import StandardRoIHead
-from mmdet.models.utils.iounet_utils import RoIGenerator
+from mmdet.models.utils.iounet_utils import IoUGenerator
 from mmengine.structures import InstanceData
 import torch
+import pdb
 
 
 @MODELS.register_module()
-class IoURoIHead(StandardRoIHead):
-    """RoIHead for IoUNet.
-    
-    Ported from:
-    https://github.com/thisisi3/OpenMMLab-IoUNet/blob/main/mmdet/iounet/iou_roi_head.py
-    
+class AdaptiveNMSRoIHead(StandardRoIHead):
+    """RoIHead for AdaptiveNMS
     """
-    def __init__(self, *args, iou_head=None, roi_generator=None, **kwargs):
-        super(IoURoIHead, self).__init__(*args, **kwargs)
-        assert iou_head is not None, 'IoU head must be present for StandardIoUHead'
+    def __init__(self, *args, nms_head=None, iou_generator=None, **kwargs):
+        super(AdaptiveNMSRoIHead, self).__init__(*args, **kwargs)
+        assert nms_head is not None, 'NMS head must be present for StandardIoUHead'
         assert not self.with_shared_head, 'shared head is not supported for now'
         assert not self.with_mask, 'mask is not supported for now'
-        self.iou_head = MODELS.build(iou_head)
-        self.roi_generator = roi_generator
-        if roi_generator is not None:
-            self.roi_generator = RoIGenerator(**roi_generator)
+        self.iou_head = MODELS.build(nms_head)
+        self.iou_generator = iou_generator
+        if iou_generator is not None:
+            self.iou_generator = IoUGenerator(**iou_generator)
 
     def init_assigner_sampler(self):
         self.bbox_assigner = None
@@ -44,9 +45,9 @@ class IoURoIHead(StandardRoIHead):
             self.bbox_assigner = TASK_UTILS.build(self.train_cfg.bbox_assigner)
             self.bbox_sampler = TASK_UTILS.build(
                 self.train_cfg.bbox_sampler, default_args=dict(context=self))
-            self.iou_assigner = TASK_UTILS.build(self.train_cfg.iou_assigner)
-            self.iou_sampler = TASK_UTILS.build(
-                self.train_cfg.iou_sampler, default_args=dict(context=self))
+            # self.iou_assigner = TASK_UTILS.build(self.train_cfg.iou_assigner)
+            # self.iou_sampler = TASK_UTILS.build(
+            #     self.train_cfg.iou_sampler, default_args=dict(context=self))
 
 
     def loss(self, x: Tuple[Tensor], rpn_results_list: InstanceList,
@@ -77,17 +78,18 @@ class IoURoIHead(StandardRoIHead):
                 - `mask_targets` (Tensor): Mask target of each positive\
                     proposals in the image.
                 - `loss_mask` (dict): A dictionary of mask loss components.
-        """        
+        """ 
+        pdb.set_trace()
         ################ the RCNN part #################  
         losses = super().loss(x, rpn_results_list,
                   batch_data_samples)
         
 
-        ################ the IoU part #################
-        # IoUHead forward and loss
-        # next do forward train on iou_head, we follow following pipeline:
-        # 1, use RoIGenerator to generate rois, it also controlls number of rois in each iou
-        #    so it also does the sampling
+        ################ the NMS part #################
+        # NMSHead forward and loss
+        # next do forward train on nms_head, we follow following pipeline:
+        # 1, use IoUGenerator to generate IoUs
+
         # 2, assign rois to gt_bboxes, use default MaxIoUAssigner
         # 3, do sampling, here we use PseudoSampler, since RoIGenerator has sampling inside.
         # TODO: it may be more reasonable to let sampler do the sampling
@@ -96,62 +98,58 @@ class IoURoIHead(StandardRoIHead):
         batch_gt_instances, batch_gt_instances_ignore, batch_img_metas = outputs
         num_imgs = len(batch_data_samples)
 
-        # TODO! iou_rois_list is not used (also unused in original cloned version)
-        # could be removed and made tidy
-        iou_rois_list = []
-        iou_sampling_results = []
+        # max_iou_list = []
+        nms_density_results = []
         # # for i in range(len(img_metas)):
         for i in range(num_imgs):
             gt_bboxes = batch_gt_instances[i].bboxes
-            gt_bboxes_ignore = batch_gt_instances_ignore[i].bboxes
+            # gt_bboxes_ignore = batch_gt_instances_ignore[i].bboxes
                         
-            iou_rois = self.roi_generator.generate_roi(
-                gt_bboxes, batch_img_metas[i]['img_shape'][:2] )
-            iou_rois_list.append(iou_rois)
+            max_iou_per_gt_bbox = self.iou_generator.generate_box_density(
+                gt_bboxes )
+            # max_iou_list.append(max_iou_per_gt_bbox)
 
-            # refactor iou_rois as InstanceData
-            iou_roi_instances = InstanceData()
-            iou_roi_instances.priors = iou_rois
+            # refactor max_ious as InstanceData
+            max_iou_per_gt_bbox_instance = InstanceData()
+            max_iou_per_gt_bbox_instance.density = max_iou_per_gt_bbox
             
-            iou_assign_result = self.iou_assigner.assign(
-                iou_roi_instances, batch_gt_instances[i],
-                batch_gt_instances_ignore[i])
+            # assign_result = self.iou_assigner.assign(
+            #     max_iou_instances, batch_gt_instances[i],
+            #     batch_gt_instances_ignore[i])
         
-            # TODO: Why is this called a Pseudo-sampler?
-            iou_sampling_result = self.iou_sampler.sample(
-                iou_assign_result,
-                iou_roi_instances,
-                batch_gt_instances[i],
-                feats=[lvl_feat[i][None] for lvl_feat in x])
+            # # # TODO: Why is this called a Pseudo-sampler?
+            # iou_sampling_result = self.iou_sampler.sample(
+            #     iou_assign_result,
+            #     max_iou_instances,
+            #     batch_gt_instances[i],
+            #     feats=[lvl_feat[i][None] for lvl_feat in x])
         
-            iou_sampling_results.append(iou_sampling_result)
+            nms_density_results.append(max_iou_per_gt_bbox_instance)
             
-        # mhf - largely guesswork            
+        # mhf - largely guesswork   
+        gt_density = [x.density for x in nms_density_results] 
         gt_bboxes = [x.bboxes for x in batch_gt_instances]
-        gt_labels = [x.labels for x in batch_gt_instances]
-        img_metas = [x for x in batch_img_metas]
         
-        iou_losses = self._iou_loss(
-            x, iou_sampling_results, gt_bboxes, gt_labels, img_metas)
+        nms_losses = self._nms_loss(
+            x, gt_density, gt_bboxes)
         
-        losses.update(iou_losses)
+        losses.update(nms_losses)
         
         return losses
 
-    def _iou_forward(self, x, rois):
-        assert rois.size(1) == 5, 'dim of rois should be [K, 5]'
-        iou_feats = self.bbox_roi_extractor(x[:self.bbox_roi_extractor.num_inputs], rois)
-        return self.iou_head(iou_feats)
+    def _nms_forward(self, x):
+        return self.nms_head(x)
         
-    def _iou_loss(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
-        """Perform forward propagation and loss calculation of the iou head on
+#    def _nms_loss(self, x, gt_density, gt_bboxes, gt_labels, img_metas):
+    def _nms_loss(self, x, gt_density, gt_bboxes):
+        """Perform forward propagation and loss calculation of the nms head on
         the features of the upstream network.
         """
-        rois = bbox2roi([res.pos_priors for res in sampling_results])
-        iou_score = self._iou_forward(x, rois)
-        loss_iou = self.iou_head.loss(
-            iou_score, sampling_results, gt_bboxes, gt_labels, rois, img_metas)
-        return dict(loss_iou=loss_iou)
+        assert len(gt_density) == len(gt_bboxes)
+        nms_score = self._nms_forward(x)
+        loss_nms = self.nms_head.loss(
+            nms_score, gt_density)
+        return dict(loss_nms=loss_nms)
         
 
 
