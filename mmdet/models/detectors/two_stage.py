@@ -170,9 +170,19 @@ class TwoStageDetector(BaseDetector):
             for data_sample in rpn_data_samples:
                 data_sample.gt_instances.labels = \
                     torch.zeros_like(data_sample.gt_instances.labels)
-
-            rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
+             
+            # mhf 22.04.24     
+            # rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
+            #     x, rpn_data_samples, proposal_cfg=proposal_cfg)
+            
+            rpn_results = self.rpn_head.loss_and_predict(
                 x, rpn_data_samples, proposal_cfg=proposal_cfg)
+            
+            if type(self.rpn_head).__name__ == 'AdaptiveNMSHead':
+                rpn_losses, rpn_results_list = rpn_results
+            else:
+                rpn_losses, rpn_results_list = rpn_results
+            
             # avoid get same name with roi_head loss
             keys = rpn_losses.keys()
             for key in list(keys):

@@ -47,6 +47,7 @@ class RPNHead(AnchorHead):
             init_cfg=init_cfg,
             **kwargs)
 
+
     def _init_layers(self) -> None:
         """Initialize layers of the head."""
         if self.num_convs > 1:
