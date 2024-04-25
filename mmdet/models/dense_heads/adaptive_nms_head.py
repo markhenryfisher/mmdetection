@@ -4,16 +4,17 @@ Created on Mon Apr 22 13:36:06 2024
 
 @author: mhf
 """
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+from mmengine.structures import InstanceData
 
 from mmdet.registry import MODELS
 from mmdet.utils import ConfigType, InstanceList, MultiConfig, OptInstanceList
-from mmdet.structures.bbox import cat_boxes, get_box_tensor
+from mmdet.structures.bbox import BaseBoxes, cat_boxes, get_box_tensor
 from .rpn_head import RPNHead
 
 from ..utils import images_to_levels, multi_apply
@@ -89,6 +90,122 @@ class AdaptiveNMSHead(RPNHead):
         rpn_dns_pred = self.dpn_reg(dns_input)
         
         return rpn_cls_score, rpn_bbox_pred, rpn_dns_pred
+    
+    
+    # def get_targets(self,
+    #                 anchor_list: List[List[Tensor]],
+    #                 valid_flag_list: List[List[Tensor]],
+    #                 batch_gt_instances: InstanceList,
+    #                 batch_img_metas: List[dict],
+    #                 batch_gt_instances_ignore: OptInstanceList = None,
+    #                 unmap_outputs: bool = True,
+    #                 return_sampling_results: bool = False) -> tuple:
+    #     """Compute regression and classification targets for anchors in
+    #     multiple images.
+
+    #     Args:
+    #         anchor_list (list[list[Tensor]]): Multi level anchors of each
+    #             image. The outer list indicates images, and the inner list
+    #             corresponds to feature levels of the image. Each element of
+    #             the inner list is a tensor of shape (num_anchors, 4).
+    #         valid_flag_list (list[list[Tensor]]): Multi level valid flags of
+    #             each image. The outer list indicates images, and the inner list
+    #             corresponds to feature levels of the image. Each element of
+    #             the inner list is a tensor of shape (num_anchors, )
+    #         batch_gt_instances (list[:obj:`InstanceData`]): Batch of
+    #             gt_instance. It usually includes ``bboxes`` and ``labels``
+    #             attributes.
+    #         batch_img_metas (list[dict]): Meta information of each image, e.g.,
+    #             image size, scaling factor, etc.
+    #         batch_gt_instances_ignore (list[:obj:`InstanceData`], optional):
+    #             Batch of gt_instances_ignore. It includes ``bboxes`` attribute
+    #             data that is ignored during training and testing.
+    #             Defaults to None.
+    #         unmap_outputs (bool): Whether to map outputs back to the original
+    #             set of anchors. Defaults to True.
+    #         return_sampling_results (bool): Whether to return the sampling
+    #             results. Defaults to False.
+
+    #     Returns:
+    #         tuple: Usually returns a tuple containing learning targets.
+
+    #             - labels_list (list[Tensor]): Labels of each level.
+    #             - label_weights_list (list[Tensor]): Label weights of each
+    #               level.
+    #             - bbox_targets_list (list[Tensor]): BBox targets of each level.
+    #             - bbox_weights_list (list[Tensor]): BBox weights of each level.
+    #             - avg_factor (int): Average factor that is used to average
+    #               the loss. When using sampling method, avg_factor is usually
+    #               the sum of positive and negative priors. When using
+    #               `PseudoSampler`, `avg_factor` is usually equal to the number
+    #               of positive priors.
+
+    #         additional_returns: This function enables user-defined returns from
+    #             `self._get_targets_single`. These returns are currently refined
+    #             to properties at each feature map (i.e. having HxW dimension).
+    #             The results will be concatenated after the end
+    #     """
+    #     # invoke the superclass
+    #     cls_reg_targets = super().get_targets(
+    #         anchor_list,
+    #         valid_flag_list,
+    #         batch_gt_instances,
+    #         batch_img_metas,
+    #         batch_gt_instances_ignore=batch_gt_instances_ignore)
+    #     (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
+    #      avg_factor) = cls_reg_targets
+        
+    #     return
+    
+    def _get_targets_single(self,
+                            flat_anchors: Union[Tensor, BaseBoxes],
+                            valid_flags: Tensor,
+                            gt_instances: InstanceData,
+                            img_meta: dict,
+                            gt_instances_ignore: Optional[InstanceData] = None,
+                            unmap_outputs: bool = True) -> tuple:
+        """Compute regression and classification targets for anchors in a
+        single image.
+
+        Args:
+            flat_anchors (Tensor or :obj:`BaseBoxes`): Multi-level anchors
+                of the image, which are concatenated into a single tensor
+                or box type of shape (num_anchors, 4)
+            valid_flags (Tensor): Multi level valid flags of the image,
+                which are concatenated into a single tensor of
+                    shape (num_anchors, ).
+            gt_instances (:obj:`InstanceData`): Ground truth of instance
+                annotations. It should includes ``bboxes`` and ``labels``
+                attributes.
+            img_meta (dict): Meta information for current image.
+            gt_instances_ignore (:obj:`InstanceData`, optional): Instances
+                to be ignored during training. It includes ``bboxes`` attribute
+                data that is ignored during training and testing.
+                Defaults to None.
+            unmap_outputs (bool): Whether to map outputs back to the original
+                set of anchors.  Defaults to True.
+
+        Returns:
+            tuple:
+
+                - labels (Tensor): Labels of each level.
+                - label_weights (Tensor): Label weights of each level.
+                - bbox_targets (Tensor): BBox targets of each level.
+                - bbox_weights (Tensor): BBox weights of each level.
+                - pos_inds (Tensor): positive samples indexes.
+                - neg_inds (Tensor): negative samples indexes.
+                - sampling_result (:obj:`SamplingResult`): Sampling results.
+        """
+        results = super()._get_targets_single(flat_anchors,
+                                   valid_flags,
+                                   gt_instances,
+                                   img_meta,
+                                   gt_instances_ignore,
+                                   unmap_outputs)
+        labels, label_weights, bbox_targets, bbox_weights, pos_inds, \
+                neg_inds, sampling_result = results
+                
+        # mhf add bbox_densities targets
 
     def loss_by_feat_single(self, cls_score: Tensor, bbox_pred: Tensor,
                             dns_pred: Tensor, dns_targets,
@@ -189,6 +306,14 @@ class AdaptiveNMSHead(RPNHead):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
+        # mhf 25.04.24
+        # Generate density GT and update batch_gt_instances 
+        for n, gt_instance in enumerate(batch_gt_instances):
+            bboxes = gt_instance.bboxes
+            dens = IoUGenerator().generate_box_density(bboxes)
+            batch_gt_instances[n].bbox_densities = dens
+        
+        
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         assert len(featmap_sizes) == self.prior_generator.num_levels
 
