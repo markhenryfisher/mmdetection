@@ -7,6 +7,7 @@ _base_ = [
 model=dict(
     rpn_head=dict(
         type='AdaptiveNMSHead',
+        loss_dns=dict(type='SmoothL1Loss', loss_weight=1.0)),
         ),
     train_cfg=dict(
         max_epochs = 12, type = 'EpochBasedTrainLoop', val_interval=1),

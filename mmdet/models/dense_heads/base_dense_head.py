@@ -19,6 +19,8 @@ from ..test_time_augs import merge_aug_results
 from ..utils import (filter_scores_and_topk, select_single_mlvl,
                      unpack_gt_instances)
 
+import pdb
+
 
 class BaseDenseHead(BaseModule, metaclass=ABCMeta):
     """Base class for DenseHeads.
@@ -154,6 +156,7 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
                 - predictions (list[:obj:`InstanceData`]): Detection
                   results of each image after the post process.
         """
+        pdb.set_trace()
         outputs = unpack_gt_instances(batch_data_samples)
         (batch_gt_instances, batch_gt_instances_ignore,
          batch_img_metas) = outputs
