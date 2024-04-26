@@ -6,6 +6,7 @@ Created on Mon Apr 22 13:36:06 2024
 """
 from typing import List, Optional, Tuple, Union
 
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -17,7 +18,8 @@ from mmdet.utils import ConfigType, InstanceList, MultiConfig, OptInstanceList
 from mmdet.structures.bbox import BaseBoxes, cat_boxes, get_box_tensor
 from .rpn_head import RPNHead
 
-from ..utils import images_to_levels, multi_apply
+from ..task_modules.prior_generators import anchor_inside_flags
+from ..utils import images_to_levels, multi_apply, unmap
 
 from mmdet.models.utils.adaptnms_utils import IoUGenerator
 
@@ -196,16 +198,91 @@ class AdaptiveNMSHead(RPNHead):
                 - neg_inds (Tensor): negative samples indexes.
                 - sampling_result (:obj:`SamplingResult`): Sampling results.
         """
-        results = super()._get_targets_single(flat_anchors,
-                                   valid_flags,
-                                   gt_instances,
-                                   img_meta,
-                                   gt_instances_ignore,
-                                   unmap_outputs)
-        labels, label_weights, bbox_targets, bbox_weights, pos_inds, \
-                neg_inds, sampling_result = results
-                
-        # mhf add bbox_densities targets
+        inside_flags = anchor_inside_flags(flat_anchors, valid_flags,
+                                           img_meta['img_shape'][:2],
+                                           self.train_cfg['allowed_border'])
+        if not inside_flags.any():
+            raise ValueError(
+                'There is no valid anchor inside the image boundary. Please '
+                'check the image size and anchor sizes, or set '
+                '``allowed_border`` to -1 to skip the condition.')
+        # assign gt and sample anchors
+        anchors = flat_anchors[inside_flags]
+
+        pred_instances = InstanceData(priors=anchors)
+        assign_result = self.assigner.assign(pred_instances, gt_instances,
+                                             gt_instances_ignore)
+
+        # mhf 26.04.24 Assign densities, in similar way to labels
+        assigned_densities = copy.deepcopy(assign_result.labels)
+        assigned_gt_inds = assign_result.gt_inds
+        gt_dens = gt_instances.bbox_densitie
+        pos_inds = torch.nonzero(
+            assigned_gt_inds > 0, as_tuple=False).squeeze()
+        if pos_inds.numel() > 0:
+            assigned_densities[pos_inds] = gt_dens[assigned_gt_inds[pos_inds] -
+                                                 1]
+
+        # No sampling is required except for RPN and
+        # Guided Anchoring algorithms
+        sampling_result = self.sampler.sample(assign_result, pred_instances,
+                                              gt_instances)
+        
+
+
+        num_valid_anchors = anchors.shape[0]
+        target_dim = gt_instances.bboxes.size(-1) if self.reg_decoded_bbox \
+            else self.bbox_coder.encode_size
+        bbox_targets = anchors.new_zeros(num_valid_anchors, target_dim)
+        bbox_weights = anchors.new_zeros(num_valid_anchors, target_dim)
+
+        # TODO: Considering saving memory, is it necessary to be long?
+        labels = anchors.new_full((num_valid_anchors, ),
+                                  self.num_classes,
+                                  dtype=torch.long)
+        label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
+
+        # mhf 26.04.24
+        dens_targets = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
+
+        pos_inds = sampling_result.pos_inds
+        neg_inds = sampling_result.neg_inds
+        # `bbox_coder.encode` accepts tensor or box type inputs and generates
+        # tensor targets. If regressing decoded boxes, the code will convert
+        # box type `pos_bbox_targets` to tensor.
+        if len(pos_inds) > 0:
+            if not self.reg_decoded_bbox:
+                pos_bbox_targets = self.bbox_coder.encode(
+                    sampling_result.pos_priors, sampling_result.pos_gt_bboxes)
+            else:
+                pos_bbox_targets = sampling_result.pos_gt_bboxes
+                pos_bbox_targets = get_box_tensor(pos_bbox_targets)
+            bbox_targets[pos_inds, :] = pos_bbox_targets
+            bbox_weights[pos_inds, :] = 1.0
+
+            labels[pos_inds] = sampling_result.pos_gt_labels
+            if self.train_cfg['pos_weight'] <= 0:
+                label_weights[pos_inds] = 1.0
+            else:
+                label_weights[pos_inds] = self.train_cfg['pos_weight']
+        if len(neg_inds) > 0:
+            label_weights[neg_inds] = 1.0
+
+        # map up to original set of anchors
+        if unmap_outputs:
+            num_total_anchors = flat_anchors.size(0)
+            labels = unmap(
+                labels, num_total_anchors, inside_flags,
+                fill=self.num_classes)  # fill bg label
+            label_weights = unmap(label_weights, num_total_anchors,
+                                  inside_flags)
+            bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
+            bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
+
+        return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
+                neg_inds, sampling_result)
+    
+    
 
     def loss_by_feat_single(self, cls_score: Tensor, bbox_pred: Tensor,
                             dns_pred: Tensor, dns_targets,
