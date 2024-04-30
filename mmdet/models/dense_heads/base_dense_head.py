@@ -161,6 +161,7 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
         (batch_gt_instances, batch_gt_instances_ignore,
          batch_img_metas) = outputs
 
+        # Note: Invokes forward_single
         outs = self(x)
 
         loss_inputs = outs + (batch_gt_instances, batch_img_metas,
