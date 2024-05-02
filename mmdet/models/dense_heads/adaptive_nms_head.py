@@ -56,6 +56,7 @@ class AdaptiveNMSHead(RPNHead):
             **kwargs)
         
         self.loss_dns = MODELS.build(loss_dns)
+        self.dns_out_channels = 1
 
         
         
@@ -390,9 +391,11 @@ class AdaptiveNMSHead(RPNHead):
             loss_rpn_dens=losses['loss_dens'], loss_rpn_cls=losses['loss_cls'], loss_rpn_bbox=losses['loss_bbox'])
 
 
+    # mhf 01.05.24 New _pedict_by_feat_single for Adaptive NMS
     def _predict_by_feat_single(self,
                                 cls_score_list: List[Tensor],
                                 bbox_pred_list: List[Tensor],
+                                dens_pred_list: List[Tensor],
                                 score_factor_list: List[Tensor],
                                 mlvl_priors: List[Tensor],
                                 img_meta: dict,
@@ -409,6 +412,10 @@ class AdaptiveNMSHead(RPNHead):
             bbox_pred_list (list[Tensor]): Box energies / deltas from
                 all scale levels of a single image, each item has shape
                 (num_priors * 4, H, W).
+                
+            dens_pred_list
+
+                
             score_factor_list (list[Tensor]): Be compatible with
                 BaseDenseHead. Not used in RPNHead.
             mlvl_priors (list[Tensor]): Each element in the list is
@@ -443,16 +450,24 @@ class AdaptiveNMSHead(RPNHead):
         mlvl_bbox_preds = []
         mlvl_valid_priors = []
         mlvl_scores = []
+        # mhf 01.05.24 
+        mlvl_dens = []
+        
         level_ids = []
-        for level_idx, (cls_score, bbox_pred, priors) in \
-                enumerate(zip(cls_score_list, bbox_pred_list,
+        # mhf 01.05.24
+        for level_idx, (cls_score, bbox_pred, dens_pred, priors) in \
+                enumerate(zip(cls_score_list, bbox_pred_list, dens_pred_list,
                               mlvl_priors)):
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
+            # mhf 01.05.25
+            assert dens_pred.size()[-2] == cls_score.size()[-2]
 
             reg_dim = self.bbox_coder.encode_size
             bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, reg_dim)
-            cls_score = cls_score.permute(1, 2,
-                                          0).reshape(-1, self.cls_out_channels)
+            cls_score = cls_score.permute(1, 2, 0).reshape(-1, self.cls_out_channels)
+
+            # mhf 01.05.24 guesswork                    
+            dens_pred = dens_pred.permute(1, 2, 0).reshape(-1, self.dns_out_channels)
             if self.use_sigmoid_cls:
                 scores = cls_score.sigmoid()
             else:
@@ -461,6 +476,10 @@ class AdaptiveNMSHead(RPNHead):
                 scores = cls_score.softmax(-1)[:, :-1]
 
             scores = torch.squeeze(scores)
+            
+            # mhf 01.05.24
+            dens_pred = torch.squeeze(dens_pred)
+            
             if 0 < nms_pre < scores.shape[0]:
                 # sort is faster than topk
                 # _, topk_inds = scores.topk(cfg.nms_pre)
@@ -469,10 +488,14 @@ class AdaptiveNMSHead(RPNHead):
                 scores = ranked_scores[:nms_pre]
                 bbox_pred = bbox_pred[topk_inds, :]
                 priors = priors[topk_inds]
+                # mhf 01.05.24
+                dens_pred = dens_pred[topk_inds]
 
             mlvl_bbox_preds.append(bbox_pred)
             mlvl_valid_priors.append(priors)
             mlvl_scores.append(scores)
+            # mhf 01.05.24
+            mlvl_dens.append(dens_pred)
 
             # use level id to implement the separate level nms
             level_ids.append(
@@ -488,6 +511,8 @@ class AdaptiveNMSHead(RPNHead):
         results.bboxes = bboxes
         results.scores = torch.cat(mlvl_scores)
         results.level_ids = torch.cat(level_ids)
+        # mhf 01.05.24
+        results.dens = torch.cat(mlvl_dens)
 
         return self._bbox_post_process(
             results=results, cfg=cfg, rescale=rescale, img_meta=img_meta)
@@ -495,10 +520,11 @@ class AdaptiveNMSHead(RPNHead):
 
 
     
-    
+    # mhf 01.05.24 New predict_by_feat for Adaptive NMS
     def predict_by_feat(self,
                         cls_scores: List[Tensor],
                         bbox_preds: List[Tensor],
+                        dens_preds: List[Tensor],
                         score_factors: Optional[List[Tensor]] = None,
                         batch_img_metas: Optional[List[dict]] = None,
                         cfg: Optional[ConfigDict] = None,
@@ -543,6 +569,8 @@ class AdaptiveNMSHead(RPNHead):
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
         assert len(cls_scores) == len(bbox_preds)
+        # mhf 01.05.24
+        assert len(dens_preds) == len(cls_scores)
 
         if score_factors is None:
             # e.g. Retina, FreeAnchor, Foveabox, etc.
@@ -568,6 +596,11 @@ class AdaptiveNMSHead(RPNHead):
                 cls_scores, img_id, detach=True)
             bbox_pred_list = select_single_mlvl(
                 bbox_preds, img_id, detach=True)
+
+            # mhf 01.05.24 do same for dens_preds
+            dens_pred_list = select_single_mlvl(
+                dens_preds, img_id, detach=True)
+            
             if with_score_factors:
                 score_factor_list = select_single_mlvl(
                     score_factors, img_id, detach=True)
@@ -586,7 +619,8 @@ class AdaptiveNMSHead(RPNHead):
             result_list.append(results)
         return result_list    
     
-    
+
+    # mhf 01.05.24 New _bbox_post_process for Adaptive NMS    
     def _bbox_post_process(self,
                            results: InstanceData,
                            cfg: ConfigDict,
@@ -637,6 +671,7 @@ class AdaptiveNMSHead(RPNHead):
             bboxes = get_box_tensor(results.bboxes)
             det_bboxes, keep_idxs = batched_nms(bboxes, results.scores,
                                                 results.level_ids, cfg.nms)
+            # mhf comment I think this filters all results
             results = results[keep_idxs]
             # some nms would reweight the score, such as softnms
             results.scores = det_bboxes[:, -1]
@@ -652,5 +687,7 @@ class AdaptiveNMSHead(RPNHead):
             results_.bboxes = empty_box_as(results.bboxes)
             results_.scores = results.scores.new_zeros(0)
             results_.labels = results.scores.new_zeros(0)
+            # mhf 01.05.24
+            results_.dens = results.dens.new_zeros(0)
             results = results_
         return results
