@@ -156,7 +156,6 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
                 - predictions (list[:obj:`InstanceData`]): Detection
                   results of each image after the post process.
         """
-        pdb.set_trace()
         outputs = unpack_gt_instances(batch_data_samples)
         (batch_gt_instances, batch_gt_instances_ignore,
          batch_img_metas) = outputs
@@ -168,6 +167,7 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
                               batch_gt_instances_ignore)
         losses = self.loss_by_feat(*loss_inputs)
 
+        pdb.set_trace()
         predictions = self.predict_by_feat(
             *outs, batch_img_metas=batch_img_metas, cfg=proposal_cfg)
         return losses, predictions

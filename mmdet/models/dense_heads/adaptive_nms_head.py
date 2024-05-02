@@ -32,7 +32,7 @@ from mmdet.models.utils.adaptnms_utils import IoUGenerator
 
 from ..utils import (select_single_mlvl)
 
-
+import pdb
 
 @MODELS.register_module()
 class AdaptiveNMSHead(RPNHead):
@@ -97,6 +97,8 @@ class AdaptiveNMSHead(RPNHead):
         return rpn_cls_score, rpn_bbox_pred, rpn_dns_pred
     
 
+    # mhf _get_targets_single overrides AnchorHead method
+    # Invoked by AnchorHead.get_targets 
     def _get_targets_single(self,
                             flat_anchors: Union[Tensor, BaseBoxes],
                             valid_flags: Tensor,
@@ -164,6 +166,12 @@ class AdaptiveNMSHead(RPNHead):
         if pos_inds.numel() > 0:
             assigned_densities[pos_inds] = gt_dens[assigned_gt_inds[pos_inds] -
                                                   1]
+            
+        # mhf 02.05.24 check assigned densities and assigned_labels 
+        # have same anchors
+        assert torch.all(torch.eq(torch.nonzero(assigned_labels > -1), 
+            torch.nonzero(assigned_densities > -1)))
+            
         # Add user defined property `gt_dens' (gt density)
         assign_result._extra_properties['gt_dens']  = assigned_densities
 
@@ -174,6 +182,9 @@ class AdaptiveNMSHead(RPNHead):
         
         # mhf 26.04.24 cf sampling_result.pos_gt_labels
         pos_gt_dens = assign_result._extra_properties['gt_dens'][pos_inds]
+
+        # mhf 02.05.24 check sampling of gt_dens is consistent with labels
+        assert sampling_result.pos_gt_labels.shape == pos_gt_dens.shape
 
         num_valid_anchors = anchors.shape[0]
         target_dim = gt_instances.bboxes.size(-1) if self.reg_decoded_bbox \
@@ -187,7 +198,8 @@ class AdaptiveNMSHead(RPNHead):
                                   dtype=torch.long)
         label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
 
-        # mhf 26.04.24 added densities
+        # mhf 02.05.24 add densities. Note: Value of background densities is
+        # 0. Value of foreground will be gt_density (i.e. value between 0.0 and 0.99).
         densities = anchors.new_zeros((num_valid_anchors, ),
                                   dtype=torch.long)
 
@@ -235,7 +247,7 @@ class AdaptiveNMSHead(RPNHead):
             bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
             bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
 
-        # Note: last element in the tuple is user defined
+        # mhf Note: last element in the tuple is user defined
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds, sampling_result, densities)
 
@@ -279,7 +291,8 @@ class AdaptiveNMSHead(RPNHead):
         
         # mhf 29.04.24 density loss
         # TODO! Test this!
-        # pdb.set_trace()
+        # 02.05.24 check for assert error in Smooth L1 Loss
+        pdb.set_trace()
         dens_pred = dens_pred.permute(0, 2, 3,
                                     1).reshape(-1, self.dns_out_channels)
         loss_dens = self.loss_dns(
@@ -305,8 +318,8 @@ class AdaptiveNMSHead(RPNHead):
     
     
     
-    # mhf 23.04.24 new loss_by_feat for Adaptive NMS
-    # based on AnchorHead.loss_by_feat
+    # mhf loss_by_feat overrides RPNHead.loss_by_feat
+    # Invoked by BaseDensityHead.loss_and_predict
     def loss_by_feat(self, 
                      cls_scores: List[Tensor],
                      bbox_preds: List[Tensor],
@@ -353,6 +366,8 @@ class AdaptiveNMSHead(RPNHead):
 
         anchor_list, valid_flag_list = self.get_anchors(
             featmap_sizes, batch_img_metas, device=device)
+        
+        print('getting targets..')
         cls_reg_targets = self.get_targets(
             anchor_list,
             valid_flag_list,
@@ -371,6 +386,7 @@ class AdaptiveNMSHead(RPNHead):
         all_anchor_list = images_to_levels(concat_anchor_list,
                                            num_level_anchors)
 
+        print('calculating losses...')
         losses_dens, losses_cls, losses_bbox = multi_apply(
             self.loss_by_feat_single,
             cls_scores,
@@ -392,6 +408,7 @@ class AdaptiveNMSHead(RPNHead):
 
 
     # mhf 01.05.24 New _pedict_by_feat_single for Adaptive NMS
+    # Note: dens_pred_list param.
     def _predict_by_feat_single(self,
                                 cls_score_list: List[Tensor],
                                 bbox_pred_list: List[Tensor],
@@ -607,9 +624,12 @@ class AdaptiveNMSHead(RPNHead):
             else:
                 score_factor_list = [None for _ in range(num_levels)]
 
+            print('predicting batch {}...'.format(img_id))
+            # mhf add dens_pred_list
             results = self._predict_by_feat_single(
                 cls_score_list=cls_score_list,
                 bbox_pred_list=bbox_pred_list,
+                dens_pred_list=dens_pred_list,
                 score_factor_list=score_factor_list,
                 mlvl_priors=mlvl_priors,
                 img_meta=img_meta,
@@ -620,7 +640,8 @@ class AdaptiveNMSHead(RPNHead):
         return result_list    
     
 
-    # mhf 01.05.24 New _bbox_post_process for Adaptive NMS    
+    # mhf 01.05.24 New _bbox_post_process for Adaptive NMS
+    # Invoked by self.predict_by_feat_single    
     def _bbox_post_process(self,
                            results: InstanceData,
                            cfg: ConfigDict,
@@ -654,6 +675,8 @@ class AdaptiveNMSHead(RPNHead):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
+        print('post_processing bboxes...')
+        
         assert with_nms, '`with_nms` must be True in RPNHead'
         if rescale:
             assert img_meta.get('scale_factor') is not None
