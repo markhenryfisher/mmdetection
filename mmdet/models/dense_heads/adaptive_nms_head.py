@@ -32,7 +32,6 @@ from mmdet.models.utils.adaptnms_utils import IoUGenerator
 
 from ..utils import (select_single_mlvl)
 
-import pdb
 
 @MODELS.register_module()
 class AdaptiveNMSHead(RPNHead):
@@ -49,6 +48,7 @@ class AdaptiveNMSHead(RPNHead):
                      type='Normal', layer='Conv2d', std=0.01),
                  num_convs: int = 1,
                  **kwargs) -> None:
+
         super().__init__(
             num_classes=num_classes,
             in_channels=in_channels,
@@ -72,7 +72,7 @@ class AdaptiveNMSHead(RPNHead):
             + (num_anchors * cls_out_channels) 
         self.dpn_reg = nn.Conv2d(n_dns_channels, num_anchors, kernel_size=5, padding=2, stride=1)
         
-    def forward_single(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward_single(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         """Forward feature of a single scale level.
 
         Args:
@@ -92,9 +92,12 @@ class AdaptiveNMSHead(RPNHead):
         rpn_bbox_pred = self.rpn_reg(x)
        
         dns_input = torch.cat((x, rpn_cls_score, rpn_bbox_pred), dim=1)        
-        rpn_dns_pred = self.dpn_reg(dns_input)
+        dpn_dns_pred = self.dpn_reg(dns_input)
         
-        return rpn_cls_score, rpn_bbox_pred, rpn_dns_pred
+        # mhf 03.05.24 Check shape of dns_pred is consistent with cls_score 
+        assert rpn_cls_score.shape == dpn_dns_pred.shape
+        
+        return rpn_cls_score, rpn_bbox_pred, dpn_dns_pred
     
 
     # mhf _get_targets_single overrides AnchorHead method
@@ -181,10 +184,11 @@ class AdaptiveNMSHead(RPNHead):
                                               gt_instances)
         
         # mhf 26.04.24 cf sampling_result.pos_gt_labels
-        pos_gt_dens = assign_result._extra_properties['gt_dens'][pos_inds]
+        pos_gt_dens = assigned_densities[sampling_result.pos_inds]
 
-        # mhf 02.05.24 check sampling of gt_dens is consistent with labels
-        assert sampling_result.pos_gt_labels.shape == pos_gt_dens.shape
+        # mhf 03.05.24 check sampling of gt_dens is consistent with labels
+        assert sampling_result.pos_gt_labels.size() == pos_gt_dens.size()
+
 
         num_valid_anchors = anchors.shape[0]
         target_dim = gt_instances.bboxes.size(-1) if self.reg_decoded_bbox \
@@ -247,6 +251,8 @@ class AdaptiveNMSHead(RPNHead):
             bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
             bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
 
+        # mhf check labels vs densities
+
         # mhf Note: last element in the tuple is user defined
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds, sampling_result, densities)
@@ -266,6 +272,7 @@ class AdaptiveNMSHead(RPNHead):
                 Has shape (N, num_anchors * num_classes, H, W).
             bbox_pred (Tensor): Box energies / deltas for each scale
                 level with shape (N, num_anchors * 4, H, W).
+            dens_pred (Tensor): Box densities
             anchors (Tensor): Box reference for each scale level with shape
                 (N, num_total_anchors, 4).
             labels (Tensor): Labels of each anchors with shape
@@ -276,6 +283,8 @@ class AdaptiveNMSHead(RPNHead):
                 weight shape (N, num_total_anchors, 4).
             bbox_weights (Tensor): BBox regression loss weights of each anchor
                 with shape (N, num_total_anchors, 4).
+            densities: Densities of each anchors with shape
+                (N, num_total_anchors)
             avg_factor (int): Average factor that is used to average the loss.
 
         Returns:
@@ -289,14 +298,13 @@ class AdaptiveNMSHead(RPNHead):
         loss_cls = self.loss_cls(
             cls_score, labels, label_weights, avg_factor=avg_factor)
         
-        # mhf 29.04.24 density loss
-        # TODO! Test this!
-        # 02.05.24 check for assert error in Smooth L1 Loss
-        pdb.set_trace()
+        # mhf 03.05.24 
+        # density loss
+        densities = densities.reshape(-1)
         dens_pred = dens_pred.permute(0, 2, 3,
-                                    1).reshape(-1, self.dns_out_channels)
+                                    1).reshape(-1)
         loss_dens = self.loss_dns(
-            dens_pred, densities, avg_factor=avg_factor)
+            dens_pred, densities)
         
         # regression loss
         target_dim = bbox_targets.size(-1)
