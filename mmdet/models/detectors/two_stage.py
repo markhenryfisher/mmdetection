@@ -11,6 +11,8 @@ from mmdet.structures import SampleList
 from mmdet.utils import ConfigType, OptConfigType, OptMultiConfig
 from .base import BaseDetector
 
+import pdb
+
 
 @MODELS.register_module()
 class TwoStageDetector(BaseDetector):
@@ -62,6 +64,7 @@ class TwoStageDetector(BaseDetector):
 
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
+        
 
     def _load_from_state_dict(self, state_dict: dict, prefix: str,
                               local_metadata: dict, strict: bool,
@@ -170,18 +173,18 @@ class TwoStageDetector(BaseDetector):
             for data_sample in rpn_data_samples:
                 data_sample.gt_instances.labels = \
                     torch.zeros_like(data_sample.gt_instances.labels)
-             
-            # mhf 22.04.24     
-            # rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
-            #     x, rpn_data_samples, proposal_cfg=proposal_cfg)
-            
-            rpn_results = self.rpn_head.loss_and_predict(
+                
+            rpn_losses, rpn_results_list = self.rpn_head.loss_and_predict(
                 x, rpn_data_samples, proposal_cfg=proposal_cfg)
             
-            if type(self.rpn_head).__name__ == 'AdaptiveNMSHead':
-                rpn_losses, rpn_results_list = rpn_results
-            else:
-                rpn_losses, rpn_results_list = rpn_results
+            # mhf 04.05.24 This isn't needed
+            # rpn_results = self.rpn_head.loss_and_predict(
+            #     x, rpn_data_samples, proposal_cfg=proposal_cfg)
+            
+            # if type(self.rpn_head).__name__ == 'AdaptiveNMSHead':
+            #     rpn_losses, rpn_results_list = rpn_results
+            # else:
+            #     rpn_losses, rpn_results_list = rpn_results
             
             # avoid get same name with roi_head loss
             keys = rpn_losses.keys()

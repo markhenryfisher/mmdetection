@@ -304,7 +304,7 @@ class AdaptiveNMSHead(RPNHead):
         dens_pred = dens_pred.permute(0, 2, 3,
                                     1).reshape(-1)
         loss_dens = self.loss_dns(
-            dens_pred, densities)
+            dens_pred, densities, label_weights, avg_factor=avg_factor)
         
         # regression loss
         target_dim = bbox_targets.size(-1)
@@ -375,7 +375,7 @@ class AdaptiveNMSHead(RPNHead):
         anchor_list, valid_flag_list = self.get_anchors(
             featmap_sizes, batch_img_metas, device=device)
         
-        print('getting targets..')
+        # print('getting targets..')
         cls_reg_targets = self.get_targets(
             anchor_list,
             valid_flag_list,
@@ -394,7 +394,7 @@ class AdaptiveNMSHead(RPNHead):
         all_anchor_list = images_to_levels(concat_anchor_list,
                                            num_level_anchors)
 
-        print('calculating losses...')
+        # print('calculating losses...')
         losses_dens, losses_cls, losses_bbox = multi_apply(
             self.loss_by_feat_single,
             cls_scores,
@@ -632,7 +632,7 @@ class AdaptiveNMSHead(RPNHead):
             else:
                 score_factor_list = [None for _ in range(num_levels)]
 
-            print('predicting batch {}...'.format(img_id))
+            # print('predicting batch {}...'.format(img_id))
             # mhf add dens_pred_list
             results = self._predict_by_feat_single(
                 cls_score_list=cls_score_list,
@@ -683,7 +683,7 @@ class AdaptiveNMSHead(RPNHead):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
-        print('post_processing bboxes...')
+        # print('post_processing bboxes...')
         
         assert with_nms, '`with_nms` must be True in RPNHead'
         if rescale:
