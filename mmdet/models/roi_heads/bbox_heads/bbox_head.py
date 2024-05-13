@@ -18,6 +18,8 @@ from mmdet.registry import MODELS, TASK_UTILS
 from mmdet.structures.bbox import get_box_tensor, scale_boxes
 from mmdet.utils import ConfigType, InstanceList, OptMultiConfig
 
+import pdb
+
 
 @MODELS.register_module()
 class BBoxHead(BaseModule):
@@ -551,6 +553,7 @@ class BBoxHead(BaseModule):
         box_dim = bboxes.size(-1)
         bboxes = bboxes.view(num_rois, -1)
 
+        pdb.set_trace()
         if rcnn_test_cfg is None:
             # This means that it is aug test.
             # It needs to return the raw results without nms.

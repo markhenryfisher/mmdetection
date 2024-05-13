@@ -10,19 +10,31 @@ model=dict(
         loss_dns=dict(type='SmoothL1Loss', loss_weight=1.0)
         ),
     train_cfg=dict(
-        max_epochs = 12, type = 'EpochBasedTrainLoop', val_interval=1),
-    test_cfg=dict(
-        rcnn=dict(
-            iou=dict(
-                nms=dict(multiclass=True, iou_threshold=0.5),
-                refine=dict(
-                    pre_refine=100,
-                    t=5,
-                    omega_1=0.001,
-                    omega_2=-0.01,
-                    lamb=0.5,
-                    use_iou_score=True)
-                ))))
+        max_epochs = 12, type = 'EpochBasedTrainLoop', val_interval=1))
+
+# currently using default test_cfg       
+    # test_cfg=dict(
+        # rpn=dict(
+            # nms_pre=1000,
+            # max_per_img=1000,
+            # nms=dict(type='nms', iou_threshold=0.7),
+            # min_bbox_size=0),
+        # rcnn=dict(
+            # score_thr=0.05,
+            # nms=dict(type='nms', iou_threshold=0.5),
+            # max_per_img=100)
+        # soft-nms is also supported for rcnn testing
+        # e.g., nms=dict(type='soft_nms', iou_threshold=0.5, min_score=0.05)
+
+                
+# Modify learning rate (reduced by factor of 10)
+# optimizer
+optim_wrapper = dict(
+    type='OptimWrapper',
+    optimizer=dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)) 
 
 # For better, more stable performance initialize from COCO                    
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+
+# Use a Faster RCNN model, adaptive-nms-net pre-trained on coco for 12 epochs  
+# load_from = './work_dirs/faster-rcnn_nms_r50_fpn_1x_coco/epoch_12.pth' 
