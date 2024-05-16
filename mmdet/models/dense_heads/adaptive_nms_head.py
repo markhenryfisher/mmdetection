@@ -32,6 +32,8 @@ from mmdet.models.utils.adaptnms_utils import IoUGenerator
 
 from ..utils import (select_single_mlvl)
 
+import pdb
+
 
 @MODELS.register_module()
 class AdaptiveNMSHead(RPNHead):
@@ -49,19 +51,21 @@ class AdaptiveNMSHead(RPNHead):
                  num_convs: int = 1,
                  **kwargs) -> None:
 
+        self.num_convs = num_convs
+        assert num_classes == 1
+        self.loss_dns_cfg = loss_dns
         super().__init__(
             num_classes=num_classes,
             in_channels=in_channels,
             init_cfg=init_cfg,
             **kwargs)
-        
-        self.loss_dns = MODELS.build(loss_dns)
-        self.dns_out_channels = 1
-
-        
+       
         
     def _init_layers(self) -> None:
-        super()._init_layers()
+        # put density loss here
+        self.loss_dns = MODELS.build(self.loss_dns_cfg)
+        self.dns_out_channels = 1
+        super(AdaptiveNMSHead, self)._init_layers() 
 
         # init the density prediction regressor
         in_channels = self.in_channels
@@ -71,6 +75,16 @@ class AdaptiveNMSHead(RPNHead):
         n_dns_channels = in_channels + (num_anchors * reg_dim) \
             + (num_anchors * cls_out_channels) 
         self.dpn_reg = nn.Conv2d(n_dns_channels, num_anchors, kernel_size=5, padding=2, stride=1)
+
+        # for layer in self.modules():
+        #     print(layer)
+        
+        layer = self.dpn_reg
+        if isinstance(layer, nn.Conv2d):
+            torch.nn.init.normal_(layer.weight, std=0.01)  # type: ignore[arg-type]
+            if layer.bias is not None:
+                torch.nn.init.constant_(layer.bias, 0)  # type: ignore[arg-type]
+
         
     def forward_single(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         """Forward feature of a single scale level.
@@ -86,6 +100,7 @@ class AdaptiveNMSHead(RPNHead):
                     level, the channels number is num_base_priors * 4.
                 dns_pred (Tensor): Density
         """
+        # pdb.set_trace()
         x = self.rpn_conv(x)
         x = F.relu(x)
         rpn_cls_score = self.rpn_cls(x)
@@ -300,11 +315,32 @@ class AdaptiveNMSHead(RPNHead):
         
         # mhf 03.05.24 
         # density loss
+        # pdb.set_trace()
         densities = densities.reshape(-1)
         dens_pred = dens_pred.permute(0, 2, 3,
                                     1).reshape(-1)
-        loss_dens = self.loss_dns(
-            dens_pred, densities, label_weights, avg_factor=avg_factor)
+
+        # mhf This is how torchvision version finds density loss
+        # densityness_loss = F.smooth_l1_loss(densityness[sampled_inds], 
+        #                                     density_targets[sampled_inds])
+
+        # mhf This was first attempt
+        # loss_dens = self.loss_dns(
+        #     dens_pred, densities, label_weights, avg_factor=avg_factor)
+        
+        # mhf This is test attempt - set ALL NMS to a value (0.7)
+        dpn_mode = self.train_cfg.get('dpn_mode', None)
+        if dpn_mode is not None:
+            assert dpn_mode['type'] in ['const', 'normal']
+            if dpn_mode['type'] == 'const':                
+                const_densities = torch.ones_like(label_weights)  * dpn_mode['value']
+                loss_dens = F.smooth_l1_loss(dens_pred[:], const_densities[:])
+                
+        else:
+            loss_dens = self.loss_dns(
+                dens_pred, densities, label_weights, avg_factor=avg_factor)
+
+        # print('Loss= {:.2f}'.format(loss_dens))
         
         # regression loss
         target_dim = bbox_targets.size(-1)
@@ -366,7 +402,7 @@ class AdaptiveNMSHead(RPNHead):
             dens = IoUGenerator().generate_box_density(bboxes)
             batch_gt_instances[n].bbox_densities = dens
         
-        
+        # pdb.set_trace()
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         assert len(featmap_sizes) == self.prior_generator.num_levels
 
@@ -407,6 +443,8 @@ class AdaptiveNMSHead(RPNHead):
             bbox_weights_list,
             densities_list,
             avg_factor=avg_factor)
+        
+        # print('\n')
         
         losses = dict(loss_dens=losses_dens, loss_cls=losses_cls, loss_bbox=losses_bbox)
         
@@ -467,6 +505,7 @@ class AdaptiveNMSHead(RPNHead):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
+        # pdb.set_trace()
         cfg = self.test_cfg if cfg is None else cfg
         cfg = copy.deepcopy(cfg)
         img_shape = img_meta['img_shape']
@@ -491,8 +530,6 @@ class AdaptiveNMSHead(RPNHead):
             bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, reg_dim)
             cls_score = cls_score.permute(1, 2, 0).reshape(-1, self.cls_out_channels)
 
-            # mhf 01.05.24 guesswork                    
-            dens_pred = dens_pred.permute(1, 2, 0).reshape(-1, self.dns_out_channels)
             if self.use_sigmoid_cls:
                 scores = cls_score.sigmoid()
             else:
@@ -502,6 +539,10 @@ class AdaptiveNMSHead(RPNHead):
 
             scores = torch.squeeze(scores)
             
+            # mhf 01.05.24 guesswork                    
+            dens_pred = dens_pred.permute(1, 2, 0).reshape(-1, self.dns_out_channels)
+            # mhf 15.05.24 take sigmoid!!!
+            dens_pred = dens_pred.sigmoid()
             # mhf 01.05.24
             dens_pred = torch.squeeze(dens_pred)
             
@@ -593,6 +634,7 @@ class AdaptiveNMSHead(RPNHead):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
+        # pdb.set_trace()
         assert len(cls_scores) == len(bbox_preds)
         # mhf 01.05.24
         assert len(dens_preds) == len(cls_scores)

@@ -130,6 +130,7 @@ class TwoStageDetector(BaseDetector):
             tuple: A tuple of features from ``rpn_head`` and ``roi_head``
             forward.
         """
+        # pdb.set_trace()
         results = ()
         x = self.extract_feat(batch_inputs)
 
@@ -160,6 +161,7 @@ class TwoStageDetector(BaseDetector):
         Returns:
             dict: A dictionary of loss components
         """
+        # pdb.set_trace()
         x = self.extract_feat(batch_inputs)
 
         losses = dict()
