@@ -72,7 +72,7 @@ def main():
         args.config = "configs/adaptivenmsnet/faster-rcnn_nms_r50_fpn_1x_coco.py"
 
     if args.checkpoint is None:
-        args.checkpoint = "work_dirs/faster-rcnn_nms_r50_fpn_1x_coco/epoch_12.pth"
+        args.checkpoint = "work_dirs/faster-rcnn_nms_r50_fpn_1x_coco/epoch_1.pth"
 
     args.show = True
     args.show_dir = 'temp'

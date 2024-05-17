@@ -9,6 +9,9 @@ model=dict(
         type='AdaptiveNMSHead',
         loss_dns=dict(type='SmoothL1Loss', loss_weight=1.0)
         ),
+    roi_head=dict(
+        type='AdaptNMSRoIHead'
+        ),
     train_cfg=dict(
         rpn=dict(
             dpn_mode=dict(type='const', value=0.7)

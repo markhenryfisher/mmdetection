@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from .activations import SiLU
+from .adaptive_nms import hard_nms, soft_nms
 from .bbox_nms import fast_nms, multiclass_nms
 from .brick_wrappers import (AdaptiveAvgPool2d, FrozenBatchNorm2d,
                              adaptive_avg_pool2d)
@@ -42,6 +43,7 @@ from .transformer import (MLP, AdaptivePadding, CdnQueryGenerator,
 # yapf: enable
 
 __all__ = [
+    'hard_nms', 'soft_nms',
     'fast_nms', 'multiclass_nms', 'batched_iou_nms', 'mask_matrix_nms', 'DropBlock',
     'PixelDecoder', 'TransformerEncoderPixelDecoder',
     'MSDeformAttnPixelDecoder', 'ResLayer', 'PatchMerging',

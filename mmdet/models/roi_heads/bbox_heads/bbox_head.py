@@ -459,6 +459,7 @@ class BBoxHead(BaseModule):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
+        pdb.set_trace()
         assert len(cls_scores) == len(bbox_preds)
         result_list = []
         for img_id in range(len(batch_img_metas)):
