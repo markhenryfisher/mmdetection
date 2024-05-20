@@ -6,18 +6,38 @@ from torch import Tensor
 
 from mmdet.registry import MODELS, TASK_UTILS
 from mmdet.structures import DetDataSample, SampleList
-from mmdet.structures.bbox import bbox2roi
+from mmdet.structures.bbox import bbox2roi, get_box_tensor
 from mmdet.utils import ConfigType, InstanceList
 from ..task_modules.samplers import SamplingResult
 from ..utils import empty_instances, unpack_gt_instances
 from .standard_roi_head import StandardRoIHead
-# mhf 17.05.24 Note: soft_nms can be configured for adaptive nms
-from mmdet.models.layers import soft_nms
 from mmdet.models.layers import multiclass_nms
 from mmengine.structures import InstanceData
 
 import pdb
 
+
+# def nms_score2roi(nms_score_list: List[Tensor]) -> Tensor:
+# def nms_score2roi(nms_score_list):
+#     """Convert a list of nms_scores to roi format. cf bbox2roi
+
+#     Args:
+#         nms_score_list (List[Tensor]): a list of nms_scores
+#             corresponding to a batch of images.
+# score
+#     Returns:
+#         Tensor: shape (n, 2),  Each row of data
+#         indicates [batch_ind, score].
+#     """
+#     # pdb.set_trace()
+#     rois_list = []
+#     for img_id, scores in enumerate(nms_score_list):
+#         img_inds = scores.new_full((scores.size(0), 1), img_id)
+#         scores=torch.unsqueeze(scores,1)
+#         rois = torch.cat([img_inds, scores], dim=-1)
+#         rois_list.append(rois)
+#     rois = torch.cat(rois_list, 0)
+#     return rois
 
 
 @MODELS.register_module()
@@ -54,14 +74,17 @@ class AdaptNMSRoIHead(StandardRoIHead):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
-        pdb.set_trace()
+        # pdb.set_trace()
         proposals = [res.bboxes for res in rpn_results_list]
         # mhf 17.05.24 recover the densities from the dpn
         nms_scores_list = [res.dens for res in rpn_results_list] 
-        # mhf 17.05.24 guesswork
-        nms_scores = torch.cat(nms_scores_list, 0)
+        # mhf 17.05.24 put scores in roi format
+        # nms_scores = nms_score2roi(nms_scores_list)
         
         rois = bbox2roi(proposals)
+        
+        # mhf 17.05.24 box_dim should be 4
+        box_dim = rois.size(-1) -1
 
         if rois.shape[0] == 0:
             return empty_instances(
@@ -80,8 +103,8 @@ class AdaptNMSRoIHead(StandardRoIHead):
         num_proposals_per_img = tuple(len(p) for p in proposals)
         rois = rois.split(num_proposals_per_img, 0)
         cls_scores = cls_scores.split(num_proposals_per_img, 0)
-        # mhf 17.05.24 guess we do same with nms_scores
-        nms_scores = nms_scores.split(num_proposals_per_img, 0)
+        # mhf 17.05.24 guess we do same with nms_scores!!!!! No
+        # nms_scores = nms_scores.split(num_proposals_per_img, 0)
 
         # some detector with_reg is False, bbox_preds will be None
         if bbox_preds is not None:
@@ -105,32 +128,27 @@ class AdaptNMSRoIHead(StandardRoIHead):
             rcnn_test_cfg=None,
             rescale=rescale)
         
-        # def soft_nms(dets, scores, iou_threshold, method='greedy', sigma=0.5, score_thr=None, debug=False):
-
-        
+        pdb.set_trace()
         # mhf 17.05.24 apply batched nms filter (later change to adaptive)
         nms_results = InstanceData()
         nms_result_list=[]
         for img_id in range(len(batch_img_metas)):
             bboxes = result_list[img_id].bboxes
             scores = result_list[img_id].scores
-            # iou_threshold = nms_scores
-            # det_bboxes, det_labels = soft_nms(
-            #     bboxes,
-            #     scores,
-            #     iou_threshold,
-            #     method='adaptive')
             
-            # results.bboxes = det_bboxes[:, :-1]
-            # results.scores = det_bboxes[:, -1]
-            # results.labels = det_labels
+            # mhf 17.05.24 put nms_scores into same format as scores
+            nms_scores = nms_scores_list[img_id].unsqueeze(1)           
+            nms_scores = nms_scores.repeat_interleave(scores.size(1), dim=1)
+            # nms_scores = nms_scores[:scores.size(0), :]
+
             det_bboxes, det_labels = multiclass_nms(
                 bboxes,
                 scores,
                 rcnn_test_cfg.score_thr,
                 rcnn_test_cfg.nms,
                 rcnn_test_cfg.max_per_img,
-                box_dim=bboxes.size(-1))
+                box_dim=box_dim,
+                multi_nms_scores=nms_scores)
             nms_results.bboxes = det_bboxes[:, :-1]
             nms_results.scores = det_bboxes[:, -1]
             nms_results.labels = det_labels

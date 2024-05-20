@@ -459,7 +459,7 @@ class BBoxHead(BaseModule):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
-        pdb.set_trace()
+        # pdb.set_trace()
         assert len(cls_scores) == len(bbox_preds)
         result_list = []
         for img_id in range(len(batch_img_metas)):
@@ -554,7 +554,7 @@ class BBoxHead(BaseModule):
         box_dim = bboxes.size(-1)
         bboxes = bboxes.view(num_rois, -1)
 
-        pdb.set_trace()
+        # pdb.set_trace()
         if rcnn_test_cfg is None:
             # This means that it is aug test.
             # It needs to return the raw results without nms.

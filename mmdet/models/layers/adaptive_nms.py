@@ -8,6 +8,36 @@ import torch
 # mhf 17.05.24 check this gets IoUs
 from mmdet.structures.bbox import bbox_overlaps
 
+def adaptive_nms(boxes, scores, labels, nms_scores, nms_cfg):
+    """
+    Launch soft_nms in adaptive mode
+
+    Args:
+        boxes (torch.Tensor or np.ndarray): boxes in shape (N, 4).
+        scores (torch.Tensor or np.ndarray): scores in shape (N, ).
+
+    Returns:
+        tuple: kept dets and indice.
+
+        - boxes (Tensor): Bboxes with score after nms, has shape
+          (num_bboxes, 5). last dimension 5 arrange as
+          (x1, y1, x2, y2, score)
+        - keep (Tensor): The indices of remaining boxes in input
+          boxes.
+
+    """
+    nms_cfg_ = nms_cfg.copy()
+    
+    nms_mode = nms_cfg_.pop('type', 'adaptive_nms')
+    
+    
+    
+    inds = soft_nms(boxes, scores, nms_scores, nms_mode)
+    dets = torch.cat((boxes[inds], scores[inds].reshape(-1, 1)), dim=1)
+    
+    return dets, inds
+    
+
 def hard_nms(dets, scores, iou_threshold):
     # dets: bounding box (x1,y1,x2,y2)
     # scores: bounding box confidence score
@@ -46,12 +76,12 @@ def soft_nms(dets, scores, iou_threshold, method='greedy', sigma=0.5, score_thr=
     Based on:
     https://github.com/OneDirection9/soft-nms/blob/master/py_nms.py
     """
-    if method not in ('linear', 'gaussian', 'greedy', 'adaptive'):
-        raise ValueError('soft_nms method must be linear, gaussian, greedy or adaptive')
+    if method not in ['adaptive_nms']:
+        raise ValueError('soft_nms method must be adaptive_nms')
 
     # mhf 07.12.23 incorporate adaptive nms
     # create a tensor of (repeated) iou_thresholds - similar to density 
-    if method != 'adaptive':
+    if method != 'adaptive_nms':
         iou_threshold = [iou_threshold for i in range(len(scores))]
         iou_threshold = torch.tensor(iou_threshold, dtype=torch.float)
         
@@ -87,7 +117,7 @@ def soft_nms(dets, scores, iou_threshold, method='greedy', sigma=0.5, score_thr=
             break
        
         # calculate iou
-        iou = box_ops.box_iou(dets[0, 0:4].unsqueeze(0), dets[1:, 0:4]).squeeze()
+        iou = bbox_overlaps(dets[0, 0:4].unsqueeze(0), dets[1:, 0:4]).squeeze()
 
         # mhf 07.12.23 recover the threshold
         iou_threshold = dets[0, 5]

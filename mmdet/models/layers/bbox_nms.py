@@ -3,6 +3,8 @@ from typing import Optional, Tuple, Union
 
 import torch
 from mmcv.ops.nms import batched_nms
+# TODO! Fix __init__ in layers (add adaptive_nms)
+from mmdet.models.layers import adaptive_nms
 from torch import Tensor
 
 from mmdet.structures.bbox import bbox_overlaps
@@ -17,7 +19,8 @@ def multiclass_nms(
     max_num: int = -1,
     score_factors: Optional[Tensor] = None,
     return_inds: bool = False,
-    box_dim: int = 4
+    box_dim: int = 4,
+    multi_nms_scores = None
 ) -> Union[Tuple[Tensor, Tensor, Tensor], Tuple[Tensor, Tensor]]:
     """NMS for multi-class bboxes.
 
@@ -36,12 +39,19 @@ def multiclass_nms(
         return_inds (bool, optional): Whether return the indices of kept
             bboxes. Default to False.
         box_dim (int): The dimension of boxes. Defaults to 4.
+        multi_nms_scores (Tensor): shape (n, #class)
 
     Returns:
         Union[Tuple[Tensor, Tensor, Tensor], Tuple[Tensor, Tensor]]:
             (dets, labels, indices (optional)), tensors of shape (k, 5),
             (k), and (k). Dets are boxes with scores. Labels are 0-based.
     """
+    # mhf 20.05.24 checks for addaptive NMS
+    nms_mode = nms_cfg.get('type', None)
+    if nms_mode in ['adaptive_nms']:
+        assert multi_nms_scores.size() == multi_scores.size()
+    
+    
     num_classes = multi_scores.size(1) - 1
     # exclude background category
     if multi_bboxes.shape[1] > box_dim:
@@ -52,12 +62,21 @@ def multiclass_nms(
 
     scores = multi_scores[:, :-1]
 
+    # mhf 17.05.24 same for multi_nms_scores 
+    if nms_mode in ['adaptive_nms']:
+        nms_scores = multi_nms_scores[:, :-1] 
+
     labels = torch.arange(num_classes, dtype=torch.long, device=scores.device)
     labels = labels.view(1, -1).expand_as(scores)
 
     bboxes = bboxes.reshape(-1, box_dim)
     scores = scores.reshape(-1)
     labels = labels.reshape(-1)
+    
+    # mhf 17.05.24 same for nms_scores
+    if nms_mode in ['adaptive_nms']:
+        nms_scores = nms_scores.reshape(-1)
+    
 
     if not torch.onnx.is_in_onnx_export():
         # NonZero not supported  in TensorRT
@@ -75,7 +94,12 @@ def multiclass_nms(
     if not torch.onnx.is_in_onnx_export():
         # NonZero not supported  in TensorRT
         inds = valid_mask.nonzero(as_tuple=False).squeeze(1)
-        bboxes, scores, labels = bboxes[inds], scores[inds], labels[inds]
+        # mhf 17.05.24 filter nms_scores
+        if nms_mode in ['adaptive_nms']:
+            bboxes, scores, labels, nms_scores = \
+                bboxes[inds], scores[inds], labels[inds], nms_scores[inds]
+        else:
+            bboxes, scores, labels = bboxes[inds], scores[inds], labels[inds]          
     else:
         # TensorRT NMS plugin has invalid output filled with -1
         # add dummy data to make detection output correct.
@@ -93,7 +117,14 @@ def multiclass_nms(
         else:
             return dets, labels
 
-    dets, keep = batched_nms(bboxes, scores, labels, nms_cfg)
+    # mhf 17.05.24 trap adaptive nms
+    if nms_mode in ['adaptive_nms']:
+        # TODO! currenly only returns keep!
+        dets, keep = adaptive_nms(bboxes, scores, labels, nms_scores, nms_cfg)
+    else:
+        dets, keep = batched_nms(bboxes, scores, labels, nms_cfg)
+
+    
 
     if max_num > 0:
         dets = dets[:max_num]
