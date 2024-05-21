@@ -14,9 +14,14 @@ model=dict(
         ),
     train_cfg=dict(
         rpn=dict(
-            dpn_mode=dict(type='const', value=0.7)
+            # dpn_mode=dict(type='const', value=0.7)
+            dpn_mode=None
             ),
-        max_epochs = 1, type = 'EpochBasedTrainLoop', val_interval=1))
+        max_epochs = 1, type = 'EpochBasedTrainLoop', val_interval=1),
+    test_cfg=dict(
+        rcnn=dict(
+            nms=dict(type='adaptive_nms')
+            )))
 
 # currently using default test_cfg       
     # test_cfg=dict(

@@ -269,6 +269,7 @@ class AdaptiveNMSHead(RPNHead):
         # mhf check labels vs densities
 
         # mhf Note: last element in the tuple is user defined
+        # pdb.set_trace()
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds, sampling_result, densities)
 
@@ -328,10 +329,10 @@ class AdaptiveNMSHead(RPNHead):
         # loss_dens = self.loss_dns(
         #     dens_pred, densities, label_weights, avg_factor=avg_factor)
         
-        # mhf This is test attempt - set ALL NMS to a value (0.7)
+        # mhf For degug we can set ALL NMS to a value (e.g. 0.7)
         dpn_mode = self.train_cfg.get('dpn_mode', None)
         if dpn_mode is not None:
-            assert dpn_mode['type'] in ['const', 'normal']
+            assert dpn_mode['type'] in ['const', ]
             if dpn_mode['type'] == 'const':                
                 const_densities = torch.ones_like(label_weights)  * dpn_mode['value']
                 loss_dens = F.smooth_l1_loss(dens_pred[:], const_densities[:])
