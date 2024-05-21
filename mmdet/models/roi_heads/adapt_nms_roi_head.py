@@ -128,7 +128,7 @@ class AdaptNMSRoIHead(StandardRoIHead):
             rcnn_test_cfg=None,
             rescale=rescale)
         
-        pdb.set_trace()
+        # pdb.set_trace()
         # mhf 17.05.24 apply batched nms filter (later change to adaptive)
         nms_results = InstanceData()
         nms_result_list=[]

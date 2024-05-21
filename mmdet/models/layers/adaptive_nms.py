@@ -139,7 +139,7 @@ def soft_nms(dets, scores, iou_threshold, method='greedy', sigma=0.5, score_thr=
         retained_idx = torch.where(dets[1:, 4] >= score_thr)[0]
         dets = dets[retained_idx + 1, :]
     
-    return torch.LongTensor(keep)
+    return torch.Tensor(keep).to(torch.int)
     
     
 
