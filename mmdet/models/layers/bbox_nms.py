@@ -39,7 +39,7 @@ def multiclass_nms(
         return_inds (bool, optional): Whether return the indices of kept
             bboxes. Default to False.
         box_dim (int): The dimension of boxes. Defaults to 4.
-        multi_nms_scores (Tensor): shape (n, #class)
+        multi_nms_scores (Tensor): shape (n, #class), predicted thresholds.
 
     Returns:
         Union[Tuple[Tensor, Tensor, Tensor], Tuple[Tensor, Tensor]]:
@@ -119,12 +119,9 @@ def multiclass_nms(
 
     # mhf 17.05.24 trap adaptive nms
     if nms_mode in ['adaptive_nms']:
-        # TODO! currenly only returns keep!
         dets, keep = adaptive_nms(bboxes, scores, labels, nms_scores, nms_cfg)
     else:
         dets, keep = batched_nms(bboxes, scores, labels, nms_cfg)
-
-    
 
     if max_num > 0:
         dets = dets[:max_num]

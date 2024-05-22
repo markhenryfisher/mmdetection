@@ -8,7 +8,7 @@ import torch
 # mhf 17.05.24 check this gets IoUs
 from mmdet.structures.bbox import bbox_overlaps
 
-def adaptive_nms(boxes, scores, labels, nms_scores, nms_cfg):
+def adaptive_nms(boxes, scores, labels, nms_scores, nms_cfg, debug=False):
     """
     Launch soft_nms in adaptive mode
 
@@ -30,11 +30,13 @@ def adaptive_nms(boxes, scores, labels, nms_scores, nms_cfg):
     
     nms_mode = nms_cfg_.pop('type', 'adaptive_nms')
     
-    
-    
     inds = soft_nms(boxes, scores, nms_scores, nms_mode)
+    
     dets = torch.cat((boxes[inds], scores[inds].reshape(-1, 1)), dim=1)
     
+    if debug:
+        nms_scores = nms_scores[inds]
+        print(nms_scores)
     return dets, inds
     
 
