@@ -20,8 +20,6 @@ from mmdet.registry import MODELS
 from mmdet.utils import ConfigType, InstanceList, MultiConfig, OptInstanceList
 from mmdet.structures.bbox import (BaseBoxes, cat_boxes, empty_box_as, get_box_tensor, 
                                    get_box_wh, scale_boxes)
-# from mmdet.structures.bbox import (cat_boxes, empty_box_as, get_box_tensor,
-#                                   get_box_wh, scale_boxes)
 
 from .rpn_head import RPNHead
 
@@ -31,6 +29,8 @@ from ..utils import images_to_levels, multi_apply, unmap
 from mmdet.models.utils.adaptnms_utils import IoUGenerator
 
 from ..utils import (select_single_mlvl)
+
+import pdb
 
 
 @MODELS.register_module()
@@ -166,17 +166,29 @@ class AdaptiveNMSHead(RPNHead):
         anchors = flat_anchors[inside_flags]
 
         pred_instances = InstanceData(priors=anchors)
+        pdb.set_trace()
         assign_result = self.assigner.assign(pred_instances, gt_instances,
                                              gt_instances_ignore)
 
         # mhf 26.04.24 create tensor to store gt density 
+        # cf max_iou_asigner.py...
+        # assigned_labels = assigned_gt_inds.new_full((num_bboxes, ), -1)
+        # pos_inds = torch.nonzero(
+        #     assigned_gt_inds > 0, as_tuple=False).squeeze()
+        # if pos_inds.numel() > 0:
+        #     assigned_labels[pos_inds] = gt_labels[assigned_gt_inds[pos_inds] -
+        #                                           1]
+
         assigned_labels = assign_result.labels
         assigned_gt_inds = assign_result.gt_inds
+        # mhf 23.05.24 bugfix
+        # assigned_densities = \
+        #     assigned_gt_inds.new_full((assigned_labels.size(0), ), -1 )
         assigned_densities = \
-            assigned_gt_inds.new_full((assigned_labels.size(0), ), -1 )
+            assigned_gt_inds.new_full((assigned_labels.size(0), ), 0.0, dtype=torch.float )
         gt_dens = gt_instances.bbox_densities.to(assigned_gt_inds.device)
         
-        # mhf assign gt dens
+        # mhf assign gt dens - refer to assigned_labels (comment above)
         pos_inds = torch.nonzero(
             assigned_gt_inds > 0, as_tuple=False).squeeze()
         if pos_inds.numel() > 0:
@@ -185,9 +197,11 @@ class AdaptiveNMSHead(RPNHead):
             
         # mhf 02.05.24 check assigned densities and assigned_labels 
         # have same anchors
-        assert torch.all(torch.eq(torch.nonzero(assigned_labels > -1), 
-            torch.nonzero(assigned_densities > -1)))
-            
+        # TODO bugfix 
+        # assert torch.all(torch.eq(torch.nonzero(assigned_labels > -1), 
+        #     torch.nonzero(assigned_densities > -1)))
+        
+        pdb.set_trace()
         # Add user defined property `gt_dens' (gt density)
         assign_result._extra_properties['gt_dens']  = assigned_densities
 
@@ -395,6 +409,8 @@ class AdaptiveNMSHead(RPNHead):
         """
         # mhf 25.04.24
         # Generate density GT and update batch_gt_instances 
+        # mhf 23.05.24 Fixed bug in IoUGenerator
+        # pdb.set_trace()
         for n, gt_instance in enumerate(batch_gt_instances):
             bboxes = gt_instance.bboxes
             dens = IoUGenerator().generate_box_density(bboxes)

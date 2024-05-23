@@ -4,40 +4,18 @@ from typing import List, Optional, Tuple
 import torch
 from torch import Tensor
 
-from mmdet.registry import MODELS, TASK_UTILS
-from mmdet.structures import DetDataSample, SampleList
-from mmdet.structures.bbox import bbox2roi, get_box_tensor
+from mmdet.registry import MODELS #, TASK_UTILS
+# from mmdet.structures import DetDataSample, SampleList
+from mmdet.structures.bbox import bbox2roi #, get_box_tensor
 from mmdet.utils import ConfigType, InstanceList
-from ..task_modules.samplers import SamplingResult
-from ..utils import empty_instances, unpack_gt_instances
+# from ..task_modules.samplers import SamplingResult
+from ..utils import empty_instances #, unpack_gt_instances
 from .standard_roi_head import StandardRoIHead
 from mmdet.models.layers import multiclass_nms
 from mmengine.structures import InstanceData
 
+
 import pdb
-
-
-# def nms_score2roi(nms_score_list: List[Tensor]) -> Tensor:
-# def nms_score2roi(nms_score_list):
-#     """Convert a list of nms_scores to roi format. cf bbox2roi
-
-#     Args:
-#         nms_score_list (List[Tensor]): a list of nms_scores
-#             corresponding to a batch of images.
-# score
-#     Returns:
-#         Tensor: shape (n, 2),  Each row of data
-#         indicates [batch_ind, score].
-#     """
-#     # pdb.set_trace()
-#     rois_list = []
-#     for img_id, scores in enumerate(nms_score_list):
-#         img_inds = scores.new_full((scores.size(0), 1), img_id)
-#         scores=torch.unsqueeze(scores,1)
-#         rois = torch.cat([img_inds, scores], dim=-1)
-#         rois_list.append(rois)
-#     rois = torch.cat(rois_list, 0)
-#     return rois
 
 
 @MODELS.register_module()

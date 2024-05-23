@@ -11,6 +11,8 @@ from mmdet.structures import SampleList
 from mmdet.utils import ConfigType, OptConfigType, OptMultiConfig
 from .base import BaseDetector
 
+from mmdet.models.utils.adaptnms_utils import IoUGenerator
+
 import pdb
 
 
@@ -253,7 +255,16 @@ class TwoStageDetector(BaseDetector):
         results_list = self.roi_head.predict(
             x, rpn_results_list, batch_data_samples, rescale=rescale)
 
-        # pdb.set_trace()
+        # mhf 23.05.24 add gt nms_scores to batch_data_samples
+        for n, data_sample in enumerate(batch_data_samples):
+            gt_instances = data_sample.get('gt_instances', None)
+            if gt_instances is not None:
+                bboxes = gt_instances.bboxes
+                nms_scores = IoUGenerator().generate_box_density(bboxes)
+                gt_instances.nms_scores=nms_scores
+                batch_data_samples[n].gt_instances = gt_instances
+                
+        
         batch_data_samples = self.add_pred_to_datasample(
             batch_data_samples, results_list)
         return batch_data_samples

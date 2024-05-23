@@ -39,4 +39,4 @@ class IoUGenerator(torch.nn.Module):
             max_iou_per_gt_bbox, ind = iou_mat.max(dim=1)
             result = max_iou_per_gt_bbox
                           
-        return result.to(torch.long)
+        return result # result.to(torch.long)
