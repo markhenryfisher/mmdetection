@@ -20,6 +20,8 @@ from ..structures import DetDataSample
 from ..structures.mask import BitmapMasks, PolygonMasks, bitmap_to_polygon
 from .palette import _get_adaptive_scales, get_palette, jitter_color
 
+import pdb
+
 
 @VISUALIZERS.register_module()
 class DetLocalVisualizer(Visualizer):
@@ -430,6 +432,7 @@ class DetLocalVisualizer(Visualizer):
                 and masks. Defaults to 0.3.
             step (int): Global step value to record. Defaults to 0.
         """
+        pdb.set_trace()
         image = image.clip(0, 255).astype(np.uint8)
         classes = self.dataset_meta.get('classes', None)
         palette = self.dataset_meta.get('palette', None)
@@ -665,6 +668,7 @@ class TrackLocalVisualizer(Visualizer):
                 and masks. Defaults to 0.3.
             step (int): Global step value to record. Defaults to 0.
         """
+        pdb.set_trace()
         gt_img_data = None
         pred_img_data = None
 

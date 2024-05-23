@@ -141,17 +141,23 @@ class AdaptNMSRoIHead(StandardRoIHead):
             nms_scores = nms_scores.repeat_interleave(scores.size(1), dim=1)
             # nms_scores = nms_scores[:scores.size(0), :]
 
-            det_bboxes, det_labels = multiclass_nms(
+            # mhf 22.05.24 return_inds=True ()
+            det_bboxes, det_labels, inds = multiclass_nms(
                 bboxes,
                 scores,
                 rcnn_test_cfg.score_thr,
                 rcnn_test_cfg.nms,
                 rcnn_test_cfg.max_per_img,
+                return_inds=True,
                 box_dim=box_dim,
                 multi_nms_scores=nms_scores)
+            pdb.set_trace()
             nms_results.bboxes = det_bboxes[:, :-1]
             nms_results.scores = det_bboxes[:, -1]
             nms_results.labels = det_labels
+            
+            nms_scores=nms_scores[:, -1]
+            nms_results.nms_scores=nms_scores[inds]
             
             nms_result_list.append(nms_results)
             
