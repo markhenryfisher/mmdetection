@@ -76,5 +76,5 @@ val_evaluator = dict(ann_file=data_root + 'val/annotation_coco.json')
 test_evaluator = val_evaluator
 
 # We can use the pre-trained Faster RCNN model to obtain higher performance
-# load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
-load_from = './work_dirs/faster-rcnn_nms_r50_fpn_1x_coco/epoch_1.pth'  # noqa
+load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
+# load_from = './work_dirs/faster-rcnn_nms_r50_fpn_1x_coco/epoch_1.pth'  # noqa

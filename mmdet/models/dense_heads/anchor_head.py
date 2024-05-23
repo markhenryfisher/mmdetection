@@ -17,6 +17,8 @@ from ..task_modules.samplers import PseudoSampler
 from ..utils import images_to_levels, multi_apply, unmap
 from .base_dense_head import BaseDenseHead
 
+import pdb
+
 
 @MODELS.register_module()
 class AnchorHead(BaseDenseHead):
@@ -410,6 +412,7 @@ class AnchorHead(BaseDenseHead):
         for i, r in enumerate(rest_results):  # user-added return values
             rest_results[i] = images_to_levels(r, num_level_anchors)
 
+        # pdb.set_trace()
         return res + tuple(rest_results)
 
     def loss_by_feat_single(self, cls_score: Tensor, bbox_pred: Tensor,

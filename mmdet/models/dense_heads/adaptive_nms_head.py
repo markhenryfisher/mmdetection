@@ -166,7 +166,7 @@ class AdaptiveNMSHead(RPNHead):
         anchors = flat_anchors[inside_flags]
 
         pred_instances = InstanceData(priors=anchors)
-        pdb.set_trace()
+        # pdb.set_trace()
         assign_result = self.assigner.assign(pred_instances, gt_instances,
                                              gt_instances_ignore)
 
@@ -194,14 +194,13 @@ class AdaptiveNMSHead(RPNHead):
         if pos_inds.numel() > 0:
             assigned_densities[pos_inds] = gt_dens[assigned_gt_inds[pos_inds] -
                                                   1]
-            
+        # pdb.set_trace()    
         # mhf 02.05.24 check assigned densities and assigned_labels 
         # have same anchors
         # TODO bugfix 
         # assert torch.all(torch.eq(torch.nonzero(assigned_labels > -1), 
         #     torch.nonzero(assigned_densities > -1)))
         
-        pdb.set_trace()
         # Add user defined property `gt_dens' (gt density)
         assign_result._extra_properties['gt_dens']  = assigned_densities
 
@@ -231,8 +230,9 @@ class AdaptiveNMSHead(RPNHead):
 
         # mhf 02.05.24 add densities. Note: Value of background densities is
         # 0. Value of foreground will be gt_density (i.e. value between 0.0 and 0.99).
+        # mhf 23.05.24 bugfix datatype must be float
         densities = anchors.new_zeros((num_valid_anchors, ),
-                                  dtype=torch.long)
+                                  dtype=torch.float)
 
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
