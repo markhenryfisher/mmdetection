@@ -20,8 +20,6 @@ from ..structures import DetDataSample
 from ..structures.mask import BitmapMasks, PolygonMasks, bitmap_to_polygon
 from .palette import _get_adaptive_scales, get_palette, jitter_color
 
-import pdb
-
 
 @VISUALIZERS.register_module()
 class DetLocalVisualizer(Visualizer):
@@ -151,12 +149,17 @@ class DetLocalVisualizer(Visualizer):
             for i, (pos, label) in enumerate(zip(positions, labels)):
                 if 'label_names' in instances:
                     label_text = instances.label_names[i]
+                    # label_text = '{}\n'.format(instances.label_names[i])
                 else:
                     label_text = classes[
                         label] if classes is not None else f'class {label}'
                 if 'scores' in instances:
                     score = round(float(instances.scores[i]) * 100, 1)
                     label_text += f': {score}'
+                # mhf 23.05.24 Display nms_scores if available    
+                if 'nms_scores' in instances:
+                    nms_score = round(float(instances.nms_scores[i]) * 100, 1)
+                    label_text += f': {nms_score}'
 
                 self.draw_texts(
                     label_text,
@@ -432,7 +435,6 @@ class DetLocalVisualizer(Visualizer):
                 and masks. Defaults to 0.3.
             step (int): Global step value to record. Defaults to 0.
         """
-        pdb.set_trace()
         image = image.clip(0, 255).astype(np.uint8)
         classes = self.dataset_meta.get('classes', None)
         palette = self.dataset_meta.get('palette', None)
@@ -668,7 +670,6 @@ class TrackLocalVisualizer(Visualizer):
                 and masks. Defaults to 0.3.
             step (int): Global step value to record. Defaults to 0.
         """
-        pdb.set_trace()
         gt_img_data = None
         pred_img_data = None
 

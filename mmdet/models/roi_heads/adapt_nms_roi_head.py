@@ -151,7 +151,6 @@ class AdaptNMSRoIHead(StandardRoIHead):
                 return_inds=True,
                 box_dim=box_dim,
                 multi_nms_scores=nms_scores)
-            pdb.set_trace()
             nms_results.bboxes = det_bboxes[:, :-1]
             nms_results.scores = det_bboxes[:, -1]
             nms_results.labels = det_labels

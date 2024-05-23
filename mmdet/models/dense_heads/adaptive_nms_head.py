@@ -32,8 +32,6 @@ from mmdet.models.utils.adaptnms_utils import IoUGenerator
 
 from ..utils import (select_single_mlvl)
 
-import pdb
-
 
 @MODELS.register_module()
 class AdaptiveNMSHead(RPNHead):
@@ -269,7 +267,6 @@ class AdaptiveNMSHead(RPNHead):
         # mhf check labels vs densities
 
         # mhf Note: last element in the tuple is user defined
-        # pdb.set_trace()
         return (labels, label_weights, bbox_targets, bbox_weights, pos_inds,
                 neg_inds, sampling_result, densities)
 
