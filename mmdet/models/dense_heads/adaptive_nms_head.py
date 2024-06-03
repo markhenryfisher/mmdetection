@@ -44,8 +44,9 @@ class AdaptiveNMSHead(RPNHead):
                  loss_dns: ConfigType = dict(
                      type='SmoothL1Loss', loss_weight=1.0),
 
-                 init_cfg: MultiConfig = dict(
-                     type='Normal', layer='Conv2d', std=0.01),
+                  init_cfg: MultiConfig = dict(
+                      type='Normal', layer='Conv2d', std=0.01,
+                      override=dict(type='Constant', name='dpn_reg', val=0, bias=0)),
                  num_convs: int = 1,
                  **kwargs) -> None:
 
@@ -74,14 +75,25 @@ class AdaptiveNMSHead(RPNHead):
             + (num_anchors * cls_out_channels) 
         self.dpn_reg = nn.Conv2d(n_dns_channels, num_anchors, kernel_size=5, padding=2, stride=1)
 
+        # mhf 30.05.24 This is redundent
         # for layer in self.modules():
         #     print(layer)
         
-        layer = self.dpn_reg
-        if isinstance(layer, nn.Conv2d):
-            torch.nn.init.normal_(layer.weight, std=0.01)  # type: ignore[arg-type]
-            if layer.bias is not None:
-                torch.nn.init.constant_(layer.bias, 0)  # type: ignore[arg-type]
+        # layer = self.dpn_reg
+        # if isinstance(layer, nn.Conv2d):
+        #     # mhf 30.05.24 try initializing weight to zero
+        #     # torch.nn.init.normal_(layer.weight, std=0.01)  # type: ignore[arg-type]
+        #     torch.nn.init.zeros_(layer.weight)
+        #     if layer.bias is not None:
+        #         torch.nn.init.constant_(layer.bias, 0)  # type: ignore[arg-type]
+
+        # mhf 30.05.24 Test
+        # pdb.set_trace()
+        # input_ = torch.randn(1, n_dns_channels, 200, 320)
+        # output = self.dpn_reg(input_) 
+    
+        
+        return
 
         
     def forward_single(self, x: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
@@ -98,7 +110,6 @@ class AdaptiveNMSHead(RPNHead):
                     level, the channels number is num_base_priors * 4.
                 dns_pred (Tensor): Density
         """
-        # pdb.set_trace()
         x = self.rpn_conv(x)
         x = F.relu(x)
         rpn_cls_score = self.rpn_cls(x)
@@ -110,6 +121,7 @@ class AdaptiveNMSHead(RPNHead):
         # mhf 03.05.24 Check shape of dns_pred is consistent with cls_score 
         assert rpn_cls_score.shape == dpn_dns_pred.shape
         
+        # pdb.set_trace()
         return rpn_cls_score, rpn_bbox_pred, dpn_dns_pred
     
 
@@ -349,9 +361,18 @@ class AdaptiveNMSHead(RPNHead):
                 loss_dens = F.smooth_l1_loss(dens_pred[:], const_densities[:])
                 
         else:
-            loss_dens = self.loss_dns(
-                dens_pred, densities, label_weights, avg_factor=avg_factor)
+            # loss_dens = self.loss_dns(
+            #     dens_pred, densities, label_weights, avg_factor=avg_factor)
+            # mhf 29.05.24 I think this is same as above? But is clearer.
+            # mhf NO it is not same.. but need to find out how differs
+            sampled_inds=torch.nonzero(label_weights>0)
+            if sampled_inds.shape[0]>0:
+                loss_dens = F.smooth_l1_loss(dens_pred[sampled_inds.squeeze()], densities[sampled_inds.squeeze()])
+            # loss_dens = F.l1_loss(dens_pred[sampled_inds], densities[sampled_inds])
+            else:
+                loss_dens = torch.tensor([[0.0]])
 
+        
         # print('Loss= {:.2f}'.format(loss_dens))
         
         # regression loss
@@ -679,8 +700,10 @@ class AdaptiveNMSHead(RPNHead):
                 bbox_preds, img_id, detach=True)
 
             # mhf 01.05.24 do same for dens_preds
+            # mhf 30.05.24 no need to detach because dens_pred plays no part
+            # in training RPN (its just used by post-processor).
             dens_pred_list = select_single_mlvl(
-                dens_preds, img_id, detach=True)
+                dens_preds, img_id, detach=False)
             
             if with_score_factors:
                 score_factor_list = select_single_mlvl(

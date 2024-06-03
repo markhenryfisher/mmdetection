@@ -9,7 +9,7 @@ from torch import Tensor
 
 from mmdet.structures.bbox import bbox_overlaps
 from mmdet.utils import ConfigType
-
+# import pdb
 
 def multiclass_nms(
     multi_bboxes: Tensor,
@@ -22,7 +22,8 @@ def multiclass_nms(
     box_dim: int = 4,
     multi_nms_scores = None
 ) -> Union[Tuple[Tensor, Tensor, Tensor], Tuple[Tensor, Tensor]]:
-    """NMS for multi-class bboxes.
+    """NMS for multi-class bboxes, 
+        mhf 03.06.24 also supports adaptive nms and simple nms
 
     Args:
         multi_bboxes (Tensor): shape (n, #class*4) or (n, 4)
@@ -46,10 +47,20 @@ def multiclass_nms(
             (dets, labels, indices (optional)), tensors of shape (k, 5),
             (k), and (k). Dets are boxes with scores. Labels are 0-based.
     """
-    # mhf 20.05.24 checks for addaptive NMS
+    # mhf 03.06.24 checks for addaptive NMS and simple nms
     nms_mode = nms_cfg.get('type', None)
+    assert nms_mode in ['smpl_nms', 'adaptive_nms']
+
     if nms_mode in ['adaptive_nms']:
         assert multi_nms_scores.size() == multi_scores.size()
+    else:
+        nms_scores = nms_cfg.get('iou_threshold', 0.5)
+        # mhf 03.06.24 incorporate simple nms
+        # create a tensor of (repeated) iou_threshold
+        nms_scores = [nms_scores for i in range(multi_scores.size(0))]
+        nms_scores = torch.tensor(nms_scores, dtype=torch.float)       
+        if multi_scores.is_cuda:
+            nms_scores = nms_scores.cuda()
     
     
     num_classes = multi_scores.size(1) - 1
@@ -77,7 +88,6 @@ def multiclass_nms(
     if nms_mode in ['adaptive_nms']:
         nms_scores = nms_scores.reshape(-1)
     
-
     if not torch.onnx.is_in_onnx_export():
         # NonZero not supported  in TensorRT
         # remove low scoring boxes
@@ -94,8 +104,8 @@ def multiclass_nms(
     if not torch.onnx.is_in_onnx_export():
         # NonZero not supported  in TensorRT
         inds = valid_mask.nonzero(as_tuple=False).squeeze(1)
-        # mhf 17.05.24 filter nms_scores
-        if nms_mode in ['adaptive_nms']:
+        # mhf 03.06.24 filter nms_scores
+        if nms_mode in ['adaptive_nms', 'smpl_nms']:
             bboxes, scores, labels, nms_scores = \
                 bboxes[inds], scores[inds], labels[inds], nms_scores[inds]
         else:
@@ -117,8 +127,8 @@ def multiclass_nms(
         else:
             return dets, labels
 
-    # mhf 17.05.24 trap adaptive nms
-    if nms_mode in ['adaptive_nms']:
+    # mhf 03.06.24 trap adaptive nms and simple nms
+    if nms_mode in ['adaptive_nms', 'smpl_nms']:
         dets, keep = adaptive_nms(bboxes, scores, labels, nms_scores, nms_cfg)
     else:
         dets, keep = batched_nms(bboxes, scores, labels, nms_cfg)

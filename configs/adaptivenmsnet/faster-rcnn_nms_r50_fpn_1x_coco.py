@@ -10,14 +10,14 @@ model=dict(
         loss_dns=dict(type='SmoothL1Loss', loss_weight=1.0)
         ),
     roi_head=dict(
-        type='AdaptNMSRoIHead'
+        type='AdaptNMSRoIHead',
         ),
     train_cfg=dict(
         rpn=dict(
             # dpn_mode=dict(type='const', value=0.7)
             dpn_mode=None
             ),
-        max_epochs = 1, type = 'EpochBasedTrainLoop', val_interval=1),
+        max_epochs = 4, type = 'EpochBasedTrainLoop', val_interval=1),
     test_cfg=dict(
         rcnn=dict(
             nms=dict(type='adaptive_nms')

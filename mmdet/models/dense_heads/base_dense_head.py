@@ -61,6 +61,7 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
     """
 
     def __init__(self, init_cfg: OptMultiConfig = None) -> None:
+        # pdb.set_trace()
         super().__init__(init_cfg=init_cfg)
         # `_raw_positive_infos` will be used in `get_positive_infos`, which
         # can get positive information.

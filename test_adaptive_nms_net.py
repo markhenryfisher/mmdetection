@@ -75,7 +75,7 @@ def main():
         args.checkpoint = "work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_adapt_nms/epoch_12.pth"
 
     args.show = True
-    args.show_dir = 'temp'
+    args.show_dir = 'vis_data'
 
     # Reduce the number of repeated compilations and improve
     # testing speed.

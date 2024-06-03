@@ -8,6 +8,8 @@ import torch
 # mhf 17.05.24 check this gets IoUs
 from mmdet.structures.bbox import bbox_overlaps
 
+# import pdb
+
 def adaptive_nms(boxes, scores, labels, nms_scores, nms_cfg, debug=False):
     """
     Launch soft_nms in adaptive mode
@@ -28,15 +30,12 @@ def adaptive_nms(boxes, scores, labels, nms_scores, nms_cfg, debug=False):
     """
     nms_cfg_ = nms_cfg.copy()
     
-    nms_mode = nms_cfg_.pop('type', 'adaptive_nms')
+    nms_mode = nms_cfg_.get('type', None)
     
-    inds = soft_nms(boxes, scores, nms_scores, nms_mode)
+    inds = soft_nms(boxes, scores, nms_scores, method=nms_mode)
     
-    dets = torch.cat((boxes[inds], scores[inds].reshape(-1, 1)), dim=1)
+    dets = torch.cat((boxes[inds], scores[inds].reshape(-1, 1), nms_scores[inds].reshape(-1, 1)), dim=1)
     
-    if debug:
-        nms_scores = nms_scores[inds]
-        print(nms_scores)
     return dets, inds
     
 
@@ -73,25 +72,21 @@ def hard_nms(dets, scores, iou_threshold):
     return torch.LongTensor(keep) 
 
 
-def soft_nms(dets, scores, iou_threshold, method='greedy', sigma=0.5, score_thr=None, debug=False):
+def soft_nms(dets, scores, iou_threshold, method='smpl_nms', sigma=0.5, score_thr=None, debug=False):
     """
+    SOFT_NMS supports simple, adaptive and soft nms
     Based on:
     https://github.com/OneDirection9/soft-nms/blob/master/py_nms.py
     """
-    if method not in ['adaptive_nms']:
-        raise ValueError('soft_nms method must be adaptive_nms')
-
-    # mhf 07.12.23 incorporate adaptive nms
-    # create a tensor of (repeated) iou_thresholds - similar to density 
-    if method != 'adaptive_nms':
-        iou_threshold = [iou_threshold for i in range(len(scores))]
-        iou_threshold = torch.tensor(iou_threshold, dtype=torch.float)
+    # pdb.set_trace()
+    if method not in ['adaptive_nms', 'smpl_nms']:
+        raise ValueError('Unsupported nms type: {}', method)
         
     if score_thr is None:
         score_thr = torch.min(scores)
     
     ind = torch.arange(len(scores)).unsqueeze(1).long()
-
+    
     if scores.is_cuda:
         ind = ind.cuda()
         iou_threshold = iou_threshold.cuda()

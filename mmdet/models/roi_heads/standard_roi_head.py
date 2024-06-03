@@ -12,7 +12,7 @@ from ..task_modules.samplers import SamplingResult
 from ..utils import empty_instances, unpack_gt_instances
 from .base_roi_head import BaseRoIHead
 
-import pdb
+# import pdb
 
 
 
@@ -324,7 +324,7 @@ class StandardRoIHead(BaseRoIHead):
                 - bboxes (Tensor): Has a shape (num_instances, 4),
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
-        pdb.set_trace()
+        # pdb.set_trace()
         proposals = [res.bboxes for res in rpn_results_list]
         rois = bbox2roi(proposals)
 
