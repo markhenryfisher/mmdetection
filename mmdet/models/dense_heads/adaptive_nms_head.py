@@ -368,9 +368,11 @@ class AdaptiveNMSHead(RPNHead):
             sampled_inds=torch.nonzero(label_weights>0)
             if sampled_inds.shape[0]>0:
                 loss_dens = F.smooth_l1_loss(dens_pred[sampled_inds.squeeze()], densities[sampled_inds.squeeze()])
+                # loss_dens = F.mse_loss(dens_pred[sampled_inds.squeeze()], densities[sampled_inds.squeeze()])
+
             # loss_dens = F.l1_loss(dens_pred[sampled_inds], densities[sampled_inds])
             else:
-                loss_dens = torch.tensor([[0.0]])
+                loss_dens = torch.tensor([[0.0]], requires_grad=True)
 
         
         # print('Loss= {:.2f}'.format(loss_dens))
@@ -703,7 +705,7 @@ class AdaptiveNMSHead(RPNHead):
             # mhf 30.05.24 no need to detach because dens_pred plays no part
             # in training RPN (its just used by post-processor).
             dens_pred_list = select_single_mlvl(
-                dens_preds, img_id, detach=False)
+                dens_preds, img_id, detach=True)
             
             if with_score_factors:
                 score_factor_list = select_single_mlvl(
