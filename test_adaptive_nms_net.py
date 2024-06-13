@@ -69,10 +69,10 @@ def parse_args():
 def main(): 
     args = parse_args()
     if args.config is None:
-        args.config = "configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_adapt_nms.py"
+        args.config = "configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_iou-net_plus.py"
 
     if args.checkpoint is None:
-        args.checkpoint = "work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_adapt_nms/epoch_12.pth"
+        args.checkpoint = "work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_iou-net_plus/epoch_12.pth"
 
     args.show = True
     args.show_dir = 'vis_data'

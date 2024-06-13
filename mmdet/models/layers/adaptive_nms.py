@@ -10,7 +10,7 @@ from mmdet.structures.bbox import bbox_overlaps
 
 # import pdb
 
-def adaptive_nms(boxes, scores, labels, nms_scores, nms_cfg, debug=False):
+def adaptive_nms(boxes, scores, nms_scores, nms_cfg, debug=False):
     """
     Launch soft_nms in adaptive mode
 
@@ -136,7 +136,7 @@ def soft_nms(dets, scores, iou_threshold, method='smpl_nms', sigma=0.5, score_th
         retained_idx = torch.where(dets[1:, 4] >= score_thr)[0]
         dets = dets[retained_idx + 1, :]
     
-    return torch.Tensor(keep).to(torch.int)
+    return torch.Tensor(keep).to(torch.int).cuda()
     
     
 

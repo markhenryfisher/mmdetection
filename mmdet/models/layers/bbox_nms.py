@@ -48,8 +48,9 @@ def multiclass_nms(
             (k), and (k). Dets are boxes with scores. Labels are 0-based.
     """
     # mhf 03.06.24 checks for addaptive NMS and simple nms
+    # mhf 09.06.24 or just 'nms'
     nms_mode = nms_cfg.get('type', None)
-    assert nms_mode in ['smpl_nms', 'adaptive_nms']
+    assert nms_mode in ['nms', 'smpl_nms', 'adaptive_nms']
 
     if nms_mode in ['adaptive_nms']:
         assert multi_nms_scores.size() == multi_scores.size()
@@ -129,7 +130,10 @@ def multiclass_nms(
 
     # mhf 03.06.24 trap adaptive nms and simple nms
     if nms_mode in ['adaptive_nms', 'smpl_nms']:
-        dets, keep = adaptive_nms(bboxes, scores, labels, nms_scores, nms_cfg)
+        # mhf 05.06.24 removed labels
+        # dets, keep = adaptive_nms(bboxes, scores, labels, nms_scores, nms_cfg)
+        dets, keep = adaptive_nms(bboxes, scores, nms_scores, nms_cfg)
+        
     else:
         dets, keep = batched_nms(bboxes, scores, labels, nms_cfg)
 

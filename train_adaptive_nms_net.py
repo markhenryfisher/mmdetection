@@ -60,7 +60,7 @@ def parse_args():
 def main():
     args = parse_args()
     if args.config is None:
-        args.config = "configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_adapt_nms.py"
+        args.config = "configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_iou-net_plus.py"
         
     # resume training from last checkpoint
     # args.resume = './work_dirs/faster-rcnn_nms_r50_fpn_1x_coco/epoch_1.pth'

@@ -17,7 +17,7 @@ from ..task_modules.samplers import PseudoSampler
 from ..utils import images_to_levels, multi_apply, unmap
 from .base_dense_head import BaseDenseHead
 
-import pdb
+# import pdb
 
 
 @MODELS.register_module()

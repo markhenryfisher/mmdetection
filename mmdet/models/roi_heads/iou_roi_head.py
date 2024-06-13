@@ -16,6 +16,8 @@ from mmdet.models.utils.iounet_utils import RoIGenerator
 from mmengine.structures import InstanceData
 import torch
 
+import pdb
+
 
 @MODELS.register_module()
 class IoURoIHead(StandardRoIHead):
@@ -254,6 +256,12 @@ class IoURoIHead(StandardRoIHead):
                   the last dimension 4 arrange as (x1, y1, x2, y2).
         """
         proposals = [res.bboxes for res in rpn_results_list]
+        # mhf 05.06.2024 recover densities
+        try:
+            nms_scores = [res.dens for res in rpn_results_list]
+        except:
+            nms_scores = None
+        
         for i in range(len(proposals)):
             assert proposals[i].size(1) == 4, 'dim of proposals should be [K, 4]'
         rois = bbox2roi(proposals)
@@ -313,6 +321,12 @@ class IoURoIHead(StandardRoIHead):
                 rois[i], cur_bbox_label, bbox_preds[i], batch_img_metas[i])
             
             cur_iou_score = self._iou_forward(x, regressed)
+            
+            # mhf 05.06.24 replace iou_threshold with nms_scores (if available)
+            if nms_scores is not None:
+                nms_iou_threshold = nms_scores[i]
+            else:
+                nms_iou_threshold = iou_cfg.nms.iou_threshold
 
             if iou_cfg.nms.multiclass:
                 nms_cls_score = cur_cls_score.reshape(-1)
@@ -330,9 +344,11 @@ class IoURoIHead(StandardRoIHead):
                 nms_label = cur_bbox_label
                 
             # apply iou_nms
+            # pdb.set_trace()
+
             det_bbox, det_score, det_iou, det_label = batched_iou_nms(
                 nms_regressed, nms_cls_score, nms_iou_score, nms_label,
-                iou_cfg.nms.iou_threshold, rcnn_test_cfg.score_thr,
+                nms_iou_threshold, score_thr=rcnn_test_cfg.score_thr,
                 guide=iou_cfg.nms.get('guide', 'rank'))
             
             if iou_cfg.get('refine', None) is not None and det_bbox.size(0) > 0:

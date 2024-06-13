@@ -12,6 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
+from mmcv.cnn import ConvModule
 from mmengine.structures import InstanceData
 from mmengine.config import ConfigDict
 from mmcv.ops import batched_nms
@@ -46,13 +47,14 @@ class AdaptiveNMSHead(RPNHead):
 
                   init_cfg: MultiConfig = dict(
                       type='Normal', layer='Conv2d', std=0.01,
-                      override=dict(type='Constant', name='dpn_reg', val=0, bias=0)),
+                      override=dict(type='Constant', name='dpn_reg', val=0, bias=0.5)),
                  num_convs: int = 1,
                  **kwargs) -> None:
 
         self.num_convs = num_convs
         assert num_classes == 1
         self.loss_dns_cfg = loss_dns
+        self.dns_out_channels = 1
         super().__init__(
             num_classes=num_classes,
             in_channels=in_channels,
@@ -61,19 +63,25 @@ class AdaptiveNMSHead(RPNHead):
        
         
     def _init_layers(self) -> None:
+        super()._init_layers()
         # put density loss here
-        self.loss_dns = MODELS.build(self.loss_dns_cfg)
-        self.dns_out_channels = 1
-        super(AdaptiveNMSHead, self)._init_layers() 
 
         # init the density prediction regressor
-        in_channels = self.in_channels
-        num_anchors = self.num_base_priors
+        # in_channels = self.in_channels
+        # num_anchors = self.num_base_priors
         reg_dim = self.bbox_coder.encode_size
-        cls_out_channels = self.cls_out_channels
-        n_dns_channels = in_channels + (num_anchors * reg_dim) \
-            + (num_anchors * cls_out_channels) 
-        self.dpn_reg = nn.Conv2d(n_dns_channels, num_anchors, kernel_size=5, padding=2, stride=1)
+        # cls_out_channels = self.cls_out_channels
+        # n_dns_channels = in_channels + (num_anchors * reg_dim) \
+        #     + (num_anchors * cls_out_channels) 
+        n_dns_channels = self.feat_channels + \
+            self.num_base_priors * self.cls_out_channels + \
+            self.num_base_priors * reg_dim    
+            
+        # self.rpn_reg = nn.Conv2d(self.feat_channels,
+        #                          self.num_base_priors * reg_dim, 1)
+        # self.dpn_reg = nn.Conv2d(n_dns_channels, num_anchors, kernel_size=5, padding=2, stride=1)
+
+        self.dpn_reg = nn.Conv2d(n_dns_channels, self.num_base_priors, 5, padding=2)  # kernel_size=21, padding=10, stride=1)
 
         # mhf 30.05.24 This is redundent
         # for layer in self.modules():
@@ -115,13 +123,13 @@ class AdaptiveNMSHead(RPNHead):
         rpn_cls_score = self.rpn_cls(x)
         rpn_bbox_pred = self.rpn_reg(x)
        
-        dns_input = torch.cat((x, rpn_cls_score, rpn_bbox_pred), dim=1)        
+        # mhf 04.06.24 use a simpler regressor
+        dns_input = torch.cat((x, rpn_cls_score, rpn_bbox_pred), dim=1)
         dpn_dns_pred = self.dpn_reg(dns_input)
         
         # mhf 03.05.24 Check shape of dns_pred is consistent with cls_score 
         assert rpn_cls_score.shape == dpn_dns_pred.shape
         
-        # pdb.set_trace()
         return rpn_cls_score, rpn_bbox_pred, dpn_dns_pred
     
 
@@ -372,7 +380,7 @@ class AdaptiveNMSHead(RPNHead):
 
             # loss_dens = F.l1_loss(dens_pred[sampled_inds], densities[sampled_inds])
             else:
-                loss_dens = torch.tensor([[0.0]], requires_grad=True)
+                loss_dens = torch.tensor([[0.0]])
 
         
         # print('Loss= {:.2f}'.format(loss_dens))
@@ -552,7 +560,7 @@ class AdaptiveNMSHead(RPNHead):
         mlvl_valid_priors = []
         mlvl_scores = []
         # mhf 01.05.24 
-        mlvl_dens = []
+        mlvl_dens_preds = []
         
         level_ids = []
         # mhf 01.05.24
@@ -582,6 +590,7 @@ class AdaptiveNMSHead(RPNHead):
             dens_pred = dens_pred.sigmoid()
             # mhf 01.05.24
             dens_pred = torch.squeeze(dens_pred)
+ 
             
             if 0 < nms_pre < scores.shape[0]:
                 # sort is faster than topk
@@ -598,7 +607,7 @@ class AdaptiveNMSHead(RPNHead):
             mlvl_valid_priors.append(priors)
             mlvl_scores.append(scores)
             # mhf 01.05.24
-            mlvl_dens.append(dens_pred)
+            mlvl_dens_preds.append(dens_pred)
 
             # use level id to implement the separate level nms
             level_ids.append(
@@ -615,7 +624,8 @@ class AdaptiveNMSHead(RPNHead):
         results.scores = torch.cat(mlvl_scores)
         results.level_ids = torch.cat(level_ids)
         # mhf 01.05.24
-        results.dens = torch.cat(mlvl_dens)
+        results.dens = torch.cat(mlvl_dens_preds)
+ 
 
         return self._bbox_post_process(
             results=results, cfg=cfg, rescale=rescale, img_meta=img_meta)
@@ -702,8 +712,6 @@ class AdaptiveNMSHead(RPNHead):
                 bbox_preds, img_id, detach=True)
 
             # mhf 01.05.24 do same for dens_preds
-            # mhf 30.05.24 no need to detach because dens_pred plays no part
-            # in training RPN (its just used by post-processor).
             dens_pred_list = select_single_mlvl(
                 dens_preds, img_id, detach=True)
             

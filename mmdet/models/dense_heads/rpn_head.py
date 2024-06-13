@@ -17,6 +17,8 @@ from mmdet.structures.bbox import (cat_boxes, empty_box_as, get_box_tensor,
 from mmdet.utils import InstanceList, MultiConfig, OptInstanceList
 from .anchor_head import AnchorHead
 
+# import pdb
+
 
 @MODELS.register_module()
 class RPNHead(AnchorHead):

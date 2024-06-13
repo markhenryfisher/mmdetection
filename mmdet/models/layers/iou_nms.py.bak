@@ -1,7 +1,6 @@
 from mmdet.structures.bbox import bbox_overlaps
 from mmcv.ops import nms as nms_mmcv
 import torch
-from mmdet.models.layers import adaptive_nms
 
 import pdb
 
@@ -10,12 +9,7 @@ def iou_nms(bboxes, scores, locs, iou_threshold):
     Use localization score to guide NMS. Bboxes are sorted by locs, the final score is
     taking the max of scores of all suppressed bboxes.
     """
-    # pdb.set_trace()
-    if iou_threshold.size(0)>0:
-        nms_cfg=dict(type='adaptive_nms')
-        _, keep = adaptive_nms(bboxes, scores, iou_threshold, nms_cfg)
-    else:
-        _, keep = nms_mmcv(bboxes, locs, iou_threshold)
+    _, keep = nms_mmcv(bboxes, locs, iou_threshold)
     keep_bboxes = bboxes[keep]
     overlaps = bbox_overlaps(keep_bboxes, bboxes)
     # find the suppressed bboxes for each kept bbox
@@ -30,15 +24,10 @@ def iou_nms(bboxes, scores, locs, iou_threshold):
     keep_scores = span_scores.max(1)[0]
     # sort by scores, following tradition
     keep_scores, srt_idx = keep_scores.sort(descending=True)
-    
     return keep[srt_idx], keep_scores
 
 
-
-# mhf 05.06.24 added adapt_nms_scores
-def batched_iou_nms(bboxes, scores, locs, labels, iou_threshold,
-                    score_thr=None, 
-                    guide='rank'):
+def batched_iou_nms(bboxes, scores, locs, labels, iou_threshold, score_thr=None, guide='rank'):
     """IoU guided NMS.
     
     Args:
@@ -50,7 +39,7 @@ def batched_iou_nms(bboxes, scores, locs, labels, iou_threshold,
         score_thr (float): filter scores belowing this number
         guide (str): decide how to use iou score to guide nms, 
             supported key words: none, rank, weight"""
-    # pdb.set_trace()
+    pdb.set_trace()
     if score_thr is not None:
         filt_mask = scores >= score_thr
         if filt_mask.sum().item() == 0:
@@ -63,9 +52,6 @@ def batched_iou_nms(bboxes, scores, locs, labels, iou_threshold,
         scores = scores[filt_mask]
         locs   = locs[filt_mask]
         labels = labels[filt_mask]
-        # mhf 05.06.24
-        if iou_threshold.size(0)>0:
-            iou_threshold = iou_threshold[filt_mask]
     nms_bboxes = bboxes + (labels * (bboxes.max() + 1)).view(-1, 1)
     # 'rank' is the official iou guided nms
     if guide == 'rank':
