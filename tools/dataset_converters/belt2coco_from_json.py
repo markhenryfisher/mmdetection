@@ -20,6 +20,8 @@ from mmengine.fileio import load, dump
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
+import pdb
+
 # minimum area of a region (smaller areas raise an error)
 MIN_AREA = 20
 
@@ -175,6 +177,7 @@ def fix_polygon_vertices(regions, img_size):
 def unpack_polygon(label_json):
     
     def verify_area(regions):
+        filtered_regions = []
         for c in regions:
             px = c[:, 0]; py = c[:, 1]
             
@@ -186,8 +189,11 @@ def unpack_polygon(label_json):
             area = (x_max - x_min) * (y_max - y_min)
             
             if area < MIN_AREA:
-                raise RuntimeError('Unpacking Error: Region area too small')       
-        return
+                print('Unpacking Error: Region area too small')
+            else:
+                filtered_regions.append(c)
+
+        return filtered_regions
         
     def verify_regions(regions_json):
         for region in regions_json:
@@ -196,7 +202,7 @@ def unpack_polygon(label_json):
             else:
                 raise RuntimeError('Unpacking Error: Insufficient Vertices')                              
         return
-        
+       
     if 'vertices' in label_json:
         regions_json = [label_json['vertices']]
     else:
@@ -204,7 +210,7 @@ def unpack_polygon(label_json):
 
     verify_regions(regions_json)        
     regions = [np.array([[v['x'], v['y']] for v in region_json]) for region_json in regions_json]
-    verify_area(regions)
+    regions = verify_area(regions)
 
     return regions
       
@@ -307,40 +313,80 @@ def convert2coco(img_list, img_folder, out_file):
     
 if __name__ == '__main__':
     args = parse_args()    
+    # if args.dataset is None:
+    #     args.dataset = './data/ruth/datasets/belt_data_natural'
+    # if args.belt is None: 
+    #     args.belt = 'MRV SCOTIA'
+    # if args.out_folder is None:
+    #     args.out_folder = './data/belt_data_natural'
+
     if args.dataset is None:
-        args.dataset = './data/ruth/datasets/belt_data_natural'
+        args.dataset = './data/mhf/datasets/belt_data_synthetic/Experiment160'
     if args.belt is None: 
-        args.belt = 'MRV SCOTIA'
+        args.belt = 'mrv_scotia'
     if args.out_folder is None:
-        args.out_folder = './data/belt_data_natural'
+        args.out_folder = './data/belt_data_synthetic/Experiment160'
+
 
 
     
 
-    if os.path.exists(os.path.join(args.dataset, args.belt, 'splits')):
-        pass
+    if os.path.exists(os.path.join(args.dataset, 'splits')):
+        belt_prefix = os.path.join(args.out_folder, args.belt)
+
+        train_image_folder = os.path.join(args.dataset, 'label_frames', 'train_'+args.belt)
+        train_annotation_folder = os.path.join(args.dataset, 'seg_labels_json', 'train_'+args.belt)
+
+        val_image_folder = os.path.join(args.dataset, 'label_frames', 'test_'+args.belt)
+        val_annotation_folder = os.path.join(args.dataset, 'seg_labels_json', 'test_'+args.belt)
+
+        if os.path.exists(train_image_folder):
+            train_list = list(sorted(os.listdir(train_image_folder)))
+            # make a dirs for coco train
+            train_prefix = os.path.join(belt_prefix, 'train')
+            if not os.path.exists(train_prefix):
+                os.makedirs(train_prefix)
+
+            convert2coco(train_list, 
+                          train_image_folder,
+                          out_file = os.path.join(train_prefix, 'annotation_coco.json'))
+
+        
+        if os.path.exists(val_image_folder):
+            val_list = list(sorted(os.listdir(val_image_folder)))
+
+            # make a dirs for coco test
+            val_prefix = os.path.join(belt_prefix, 'val')
+            if not os.path.exists(val_prefix):
+                os.makedirs(val_prefix)   
+       
+            convert2coco(val_list, 
+                          val_image_folder, 
+                          out_file = os.path.join(val_prefix, 'annotation_coco.json'))
+     
+
     else:
         image_folder = os.path.join(args.dataset, 'label_frames', args.belt)
         annotation_folder = os.path.join(args.dataset, 'seg_labels_json', args.belt)
         img_list = list(sorted(os.listdir(image_folder)))
         train_list, val_list = generate_splits(img_list)
     
-    # make a dirs for coco train/test
-    belt_prefix = os.path.join(args.out_folder, args.belt)
-    train_prefix = os.path.join(belt_prefix, 'train')
-    if not os.path.exists(train_prefix):
-        os.makedirs(train_prefix)
-    val_prefix = os.path.join(belt_prefix, 'val')
-    if not os.path.exists(val_prefix):
-        os.makedirs(val_prefix)   
-        
-         
-    convert2coco(train_list, 
-                  image_folder,
-                  out_file = os.path.join(train_prefix, 'annotation_coco.json'))
-
-    convert2coco(val_list, 
-                  image_folder, 
-                  out_file = os.path.join(val_prefix, 'annotation_coco.json'))
+        # make a dirs for coco train/test
+        belt_prefix = os.path.join(args.out_folder, args.belt)
+        train_prefix = os.path.join(belt_prefix, 'train')
+        if not os.path.exists(train_prefix):
+            os.makedirs(train_prefix)
+        val_prefix = os.path.join(belt_prefix, 'val')
+        if not os.path.exists(val_prefix):
+            os.makedirs(val_prefix)   
+            
+             
+        convert2coco(train_list, 
+                      image_folder,
+                      out_file = os.path.join(train_prefix, 'annotation_coco.json'))
+    
+        convert2coco(val_list, 
+                      image_folder, 
+                      out_file = os.path.join(val_prefix, 'annotation_coco.json'))
 
      

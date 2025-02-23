@@ -6,6 +6,7 @@ Created on Thu Apr 11 12:47:41 2024
 """
 import torch
 from mmdet.structures.bbox import bbox_overlaps
+import pdb
 
 class IoUGenerator(torch.nn.Module):
     """
@@ -25,7 +26,8 @@ class IoUGenerator(torch.nn.Module):
             raise ValueError('box_density: input boxes is not Tensor')
         
         if len(gt_bboxes) == 0:
-            raise ValueError('box_density: empty input boxes')
+            # raise ValueError('box_density: empty input boxes')
+            result = []
         elif len(gt_bboxes) == 1:
             result = torch.Tensor([0.0])
         else:

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Mar 17 13:04:34 2024
-mmdetection config. for MRVSCOTIA Real Footage.
-useage:     (openmmlab) S:\mhf\GitHub\mmdetection>python tools/test.py 
-            configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_baseline.py 
-            work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_baseline/epoch_12.pth 
-            --show --show-dir val_show --wait-time 10  
+Created on Mon Feb 17 13:04:34 2025
+mmdetection config. for MRVSCOTIA Synthetic Footage.
+e.g. useage:    (openmmlab) S:\mhf\GitHub\mmdetection>python tools/test.py 
+                configs/catchmonitor/baseline/faster-rcnn_r50_fpn_1x_coco_mrvscotia_syn_baseline.py 
+                work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_baseline/epoch_12.pth 
+                --show --show-dir val_syn_show --wait-time 10  
 
 @author: mhf
 """
@@ -34,7 +34,7 @@ optim_wrapper = dict(
     optimizer=dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001))
 
 # Modify dataset related settings
-data_root = 'data/belt_data_natural/MRV SCOTIA/'
+data_root = 'data/belt_data_synthetic/Experiment160/mrv_scotia/'
 metainfo = {
     'classes': ('fish_unknown', ),
     'palette': [

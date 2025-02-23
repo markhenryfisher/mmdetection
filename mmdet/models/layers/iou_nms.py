@@ -2,6 +2,7 @@ from mmdet.structures.bbox import bbox_overlaps
 from mmcv.ops import nms as nms_mmcv
 import torch
 from mmdet.models.layers import adaptive_nms
+import numpy as np
 
 import pdb
 
@@ -11,7 +12,8 @@ def iou_nms(bboxes, scores, locs, iou_threshold):
     taking the max of scores of all suppressed bboxes.
     """
     # pdb.set_trace()
-    if iou_threshold.size(0)>0:
+    # if iou_threshold.size(0)>0:
+    if isinstance(iou_threshold, np.ndarray):
         nms_cfg=dict(type='adaptive_nms')
         _, keep = adaptive_nms(bboxes, scores, iou_threshold, nms_cfg)
     else:
@@ -63,8 +65,9 @@ def batched_iou_nms(bboxes, scores, locs, labels, iou_threshold,
         scores = scores[filt_mask]
         locs   = locs[filt_mask]
         labels = labels[filt_mask]
-        # mhf 05.06.24
-        if iou_threshold.size(0)>0:
+        # mhf 05.06.24; 21.02.25
+        if isinstance(iou_threshold, np.ndarray):
+        # if iou_threshold.size(0)>0:
             iou_threshold = iou_threshold[filt_mask]
     nms_bboxes = bboxes + (labels * (bboxes.max() + 1)).view(-1, 1)
     # 'rank' is the official iou guided nms

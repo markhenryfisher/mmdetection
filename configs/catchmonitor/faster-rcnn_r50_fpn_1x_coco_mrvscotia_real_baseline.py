@@ -3,9 +3,9 @@
 Created on Sun Mar 17 13:04:34 2024
 mmdetection config. for MRVSCOTIA Real Footage.
 useage:     (openmmlab) S:\mhf\GitHub\mmdetection>python tools/test.py 
-            configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_baseline.py 
+            configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_real_baseline.py 
             work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_baseline/epoch_12.pth 
-            --show --show-dir val_show --wait-time 10  
+            --show --show-dir val_real_show --wait-time 10  
 
 @author: mhf
 """

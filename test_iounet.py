@@ -69,11 +69,11 @@ def parse_args():
 def main():
     # set Visual Studio x64 native tools environment
     # filepath="D:/path/to/batch/myBatch.bat"
-    filepath = "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvars64.bat"
-    p = subprocess.Popen(filepath, shell=True, stdout = subprocess.PIPE)
+    # filepath = "C:/Program Files/Microsoft Visual Studio/2022_17.1.0/Community/VC/Auxiliary/Build/vcvars64.bat"
+    # p = subprocess.Popen(filepath, shell=True, stdout = subprocess.PIPE)
 
-    stdout, stderr = p.communicate()
-    print(p.returncode) # is 0 if success
+    # stdout, stderr = p.communicate()
+    # print(p.returncode) # is 0 if success
     
     
     args = parse_args()

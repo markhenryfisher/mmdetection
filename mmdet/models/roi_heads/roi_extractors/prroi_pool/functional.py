@@ -30,6 +30,7 @@ def _import_prroi_pooling():
             _prroi_pooling = load_extension(
                 '_prroi_pooling',
                 [pjoin(root_dir, 'prroi_pooling_gpu.cpp'), pjoin(root_dir, 'prroi_pooling_gpu_impl.cu')],
+                # extra_cuda_cflags=['--allow-unsupported-compiler'],
                 verbose=True
             )
         except ImportError:
