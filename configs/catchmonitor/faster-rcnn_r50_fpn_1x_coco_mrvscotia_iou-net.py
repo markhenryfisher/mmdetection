@@ -5,22 +5,6 @@ Created on Mon Mar 19 10:34:34 2024
 @author: mhf
 """
 _base_ = '../faster_rcnn/faster-rcnn_r50_fpn_1x_coco.py'
-
-# We also need to change the num_classes in head to match the dataset's annotation
-# And setup nms
-# model = dict(
-    # roi_head=dict(
-        # bbox_head=dict(num_classes=1)),
-    # test_cfg=dict(
-        # rpn=dict(
-            # nms_pre=1000,
-            # max_per_img=1000,
-            # nms=dict(type='nms'),
-            # min_bbox_size=0),
-        # rcnn=dict(
-            # score_thr=0.05,
-            # nms=dict(type='nms', iou_threshold=0.5),
-            # max_per_img=100)))
             
 # We need to change the num_classes in head to match the dataset's annotation            
 model=dict(
@@ -54,7 +38,7 @@ model=dict(
             # loss_iou=dict(type='SmoothL1Loss', loss_weight=5.0))),
             loss_iou=dict(type='SmoothL1Loss', loss_weight=1.0))),
     train_cfg=dict(
-        max_epochs = 12, type = 'EpochBasedTrainLoop', val_interval=1,
+        # max_epochs = 12, type = 'EpochBasedTrainLoop', val_interval=1,
         rcnn=dict(
             _delete_=True,
             bbox_assigner=dict(
@@ -100,7 +84,7 @@ model=dict(
     # optimizer=dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001))
 
 # Modify dataset related settings
-data_root = 'data/belt_data_natural/MRV SCOTIA/'
+data_root = 'data/belt_data_synthetic/Experiment180/mrv_scotia/'
 metainfo = {
     'classes': ('fish_unknown', ),
     'palette': [
@@ -125,6 +109,10 @@ test_dataloader = val_dataloader
 # Modify metric related settings
 val_evaluator = dict(ann_file=data_root + 'val/annotation_coco.json')
 test_evaluator = val_evaluator
+
+# Modify the training schedule
+train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=100, val_interval=1)
+default_hooks = dict(checkpoint=dict(type='CheckpointHook', interval=10))
 
 # We can use a pre-trained Faster RCNN model, iou-net trained for a futher 10 epochs  
 load_from = './work_dirs/faster-rcnn_iou_r50_fpn_1x_coco/epoch_10.pth'  # noqa

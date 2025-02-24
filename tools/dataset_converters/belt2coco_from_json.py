@@ -321,11 +321,11 @@ if __name__ == '__main__':
     #     args.out_folder = './data/belt_data_natural'
 
     if args.dataset is None:
-        args.dataset = './data/mhf/datasets/belt_data_synthetic/Experiment160'
+        args.dataset = './data/mhf/datasets/belt_data_synthetic/Experiment180'
     if args.belt is None: 
         args.belt = 'mrv_scotia'
     if args.out_folder is None:
-        args.out_folder = './data/belt_data_synthetic/Experiment160'
+        args.out_folder = './data/belt_data_synthetic/Experiment180'
 
 
 

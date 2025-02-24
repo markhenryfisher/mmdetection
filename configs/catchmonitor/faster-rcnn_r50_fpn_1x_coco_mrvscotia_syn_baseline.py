@@ -3,7 +3,7 @@
 Created on Mon Feb 17 13:04:34 2025
 mmdetection config. for MRVSCOTIA Synthetic Footage.
 e.g. useage:    (openmmlab) S:\mhf\GitHub\mmdetection>python tools/test.py 
-                configs/catchmonitor/baseline/faster-rcnn_r50_fpn_1x_coco_mrvscotia_syn_baseline.py 
+                configs/catchmonitor/faster-rcnn_r50_fpn_1x_coco_mrvscotia_syn_baseline.py 
                 work_dirs/faster-rcnn_r50_fpn_1x_coco_mrvscotia_baseline/epoch_12.pth 
                 --show --show-dir val_syn_show --wait-time 10  
 
@@ -34,7 +34,7 @@ optim_wrapper = dict(
     optimizer=dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001))
 
 # Modify dataset related settings
-data_root = 'data/belt_data_synthetic/Experiment160/mrv_scotia/'
+data_root = 'data/belt_data_synthetic/Experiment180/mrv_scotia/'
 metainfo = {
     'classes': ('fish_unknown', ),
     'palette': [
@@ -59,6 +59,10 @@ test_dataloader = val_dataloader
 # Modify metric related settings
 val_evaluator = dict(ann_file=data_root + 'val/annotation_coco.json')
 test_evaluator = val_evaluator
+
+# Modify the training schedule
+train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=100, val_interval=1)
+default_hooks = dict(checkpoint=dict(type='CheckpointHook', interval=10))
 
 # We can use the pre-trained Faster RCNN model to obtain higher performance
 load_from = 'https://download.openmmlab.com/mmdetection/v2.0/faster_rcnn/faster_rcnn_r50_fpn_1x_coco/faster_rcnn_r50_fpn_1x_coco_20200130-047c8118.pth'  # noqa
