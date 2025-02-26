@@ -34,7 +34,7 @@ optim_wrapper = dict(
     optimizer=dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001))
 
 # Modify dataset related settings
-data_root = 'data/belt_data_synthetic/Experiment180/mrv_scotia/'
+data_root = 'data/belt_data_synthetic/Experiment110/mrv_scotia/'
 metainfo = {
     'classes': ('fish_unknown', ),
     'palette': [

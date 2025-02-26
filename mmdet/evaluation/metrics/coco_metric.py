@@ -18,6 +18,8 @@ from mmdet.registry import METRICS
 from mmdet.structures.mask import encode_mask_results
 from ..functional import eval_recalls
 
+import pdb
+
 
 @METRICS.register_module()
 class CocoMetric(BaseMetric):
@@ -592,6 +594,7 @@ class CocoMetric(BaseMetric):
                             f'{ap[1]:.3f} {ap[2]:.3f} {ap[3]:.3f} '
                             f'{ap[4]:.3f} {ap[5]:.3f}')
 
+        # pdb.set_trace()
         if tmp_dir is not None:
             tmp_dir.cleanup()
         return eval_results
